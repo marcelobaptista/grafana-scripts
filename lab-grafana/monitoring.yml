@@ -1,0 +1,143 @@
+version: "3.8"
+
+networks:
+  monitoring:
+    name: monitor
+    driver: bridge
+    ipam:
+      config:
+        - subnet: 172.26.0.0/16
+
+volumes:
+  alertmanager: {}
+  grafana: {}
+  prometheus: {}
+
+services:
+  grafana:
+    container_name: grafana
+    hostname: grafana
+    image: grafana/grafana:latest
+    environment:
+      # - GF_PATHS_PROVISIONING=/etc/grafana/provisioning
+      # - GF_AUTH_BASIC_ENABLED=true
+      # - GF_ENABLE_GZIP=true
+      # - GF_SECURITY_ADMIN_PASSWORD=123456
+      # - GF_METRICS_ENABLED=true 
+      - GF_SECURITY_ADMIN_USER=admin
+      - GF_SECURITY_ADMIN_PASSWORD=123456
+      - GF_USERS_ALLOW_SIGN_UP=false
+      - GF_USERS_ALLOW_ORG_CREATE=false
+      - GF_AUTH_ANONYMOUS_ENABLED=true
+      - GF_AUTH_ANONYMOUS_ORG_ROLE=Admin
+      - GF_AUTH_DISABLE_LOGIN_FORM=false
+
+    entrypoint:
+      - sh
+      - -euc
+      - |
+        mkdir -p /etc/grafana/provisioning/datasources
+        /run.sh
+    ports:
+      - 3000:3000
+    volumes:
+      - grafana:/var/lib/grafana
+    networks:
+      - monitoring
+
+  prometheus:
+    container_name: prometheus
+    hostname: prometheus
+    image: prom/prometheus:latest
+    entrypoint:
+      - sh
+      - -euc
+      - |
+        mkdir -p /etc/prometheus/rules
+        cat <<EOF > /etc/prometheus/prometheus.yml
+        global:
+          scrape_interval: 15s
+          evaluation_interval: 15s
+        scrape_configs:
+          - job_name: 'prometheus'
+            static_configs:
+              - targets: ['localhost:9090']
+          - job_name: 'node-exporter'
+            static_configs:
+              - targets: ['node-exporter:9100']
+        rule_files:
+          - /etc/prometheus/rules.yml
+        EOF
+        cat <<EOF > /etc/prometheus/rules.yml
+        groups:
+          - name: Basic monitoring
+            rules:
+              - alert: InstanceDown
+                expr: up == 0
+                for: 1m
+                labels:
+                  severity: page
+                annotations:
+                  summary: "Instance {{ $labels.instance }} down"
+                  description: "{{ $labels.instance }} of job {{ $labels.job }} has been down for more than 1 minute."
+        EOF
+        /bin/prometheus --config.file=/etc/prometheus/prometheus.yml \
+          --enable-feature=native-histograms \
+          --storage.tsdb.path=/prometheus \
+          --web.console.libraries=/usr/share/prometheus/console_libraries \
+          --web.console.templates=/usr/share/prometheus/consoles \
+          --web.enable-remote-write-receiver
+    volumes:
+      - prometheus:/etc/prometheus
+    ports:
+      - 9090:9090
+    networks:
+      - monitoring
+
+  node-exporter:
+    container_name: node-exporter
+    hostname: node-exporter
+    image: prom/node-exporter:latest
+    ports:
+      - 9100:9100
+    command:
+      - --web.disable-exporter-metrics
+    networks:
+      - monitoring
+
+  alertmanager:
+    container_name: alertmanager
+    hostname: alertmanager
+    image: prom/alertmanager:latest
+    entrypoint:
+      - sh
+      - -euc
+      - |
+        mkdir -p /etc/alertmanager
+        touch /etc/alertmanager/alertmanager.yml
+        /bin/alertmanager --config.file=/etc/alertmanager/alertmanager.yml
+    ports:
+      - 9093:9093
+    volumes:
+      - alertmanager:/etc/alertmanager
+    command:
+      - --config.file=/etc/alertmanager/alertmanager.yml
+    networks:
+      - monitoring
+
+  k6:
+    container_name: k6
+    hostname: k6
+    image: grafana/k6:latest
+    ports:
+      - "6565:6565"
+    entrypoint:
+      - sh
+      - -euc
+      - |
+        k6 new
+        K6_PROMETHEUS_RW_SERVER_URL=http://prometheus:9090/api/v1/write \
+        K6_PROMETHEUS_RW_TREND_AS_NATIVE_HISTOGRAM=true \
+        k6 run --vus 100 --duration 4h -o experimental-prometheus-rw script.js
+    networks:
+      - monitoring
