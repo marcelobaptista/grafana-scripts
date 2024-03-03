@@ -1,5 +1,10 @@
 #!/usr/bin/bash
 
+# Script em Bash para criar folders no Grafana usando sua API, e através de uma lista em formato texto. 
+# O script solicita a URL do Grafana, o token e o nome do arquivo contendo os nomes dos folders a serem criados.
+# O arquivo de entrada deve conter um nome de folder por linha.
+
+
 # Habilita o modo de saída de erro 
 set -e
 

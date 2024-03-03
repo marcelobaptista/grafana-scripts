@@ -1,22 +1,19 @@
-# Script para automatização de criação de Folders no Grafana
+# Scripts para Grafana
 
-Script em Bash para criar folders no Grafana usando sua API, e através de uma lista em formato texto. 
+Este repositório contém scripts para automatizar tarefas no Grafana, usando sua API. 
 
 ## Requisitos
 
-Antes de usar este script, certifique-se de ter os seguintes requisitos instalados:
+Antes de usar os scripts, certifique-se de ter os seguintes requisitos instalados:
 
 - [jq](https://stedolan.github.io/jq/)
 - [curl](https://curl.se/)
 
-Certifique-se de ter essas dependências instaladas e acessíveis no seu ambiente.
+## Como Executar os Scripts
 
-## Como Executar
-
-1. Faça o download do script `create_folders.sh`.
-2. No mesmo diretório, crie um arquivo de texto contendo os nomes dos folders que você deseja criar. Cada nome deve estar em uma linha separada.
-3. Abra um terminal e navegue até o diretório onde o script está localizado.
-4. Execute o seguinte comando para tornar o script executável:
+1. Faça o download, por exemplo, do script `create_folders.sh`.
+2. Abra um terminal e navegue até o diretório onde o script está localizado.
+3. Execute o seguinte comando para tornar o script executável:
 
     ```bash
     chmod +x create_folders.sh
@@ -28,13 +25,12 @@ Certifique-se de ter essas dependências instaladas e acessíveis no seu ambient
     ./create_folders.sh
     ```
 
-5. Siga as instruções fornecidas para inserir a URL do Grafana, o token de acesso e o nome do arquivo contendo os nomes dos folders a serem criados.
+5. Siga as instruções fornecidas para inserir a URL do Grafana, o token de acesso, etc.
+6. Sempre que houver necessidade de ter algum arquivo auxiliar, o script irá solicitar a inserção do arquivo.
 
-## Limitações
+## Limitações dos scripts
 
-Este script tem as seguintes limitações:
-
-- O script é capaz de criar apenas folders em uma única organização do Grafana. Não é possível criar folders em outras organizações usando este script. (em andamento)
+Os scripts trabalham com somente uma [Organization](https://grafana.com/docs/grafana/latest/administration/organization-management/) do Grafana (em andamento)
 
 ## Contribuindo
 
