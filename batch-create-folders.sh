@@ -79,14 +79,17 @@ create_folders() {
 # Menu de opções
 clear
 
+# Solicita a URL do Grafana
 printf "Digite a URL do Grafana (ex: http://127.0.0.1:3000)\n\n"
 read -r grafana_url
 [[ -z "${grafana_url}" ]] && exit_with_error "URL do Grafana não pode ser vazia"
 
+# Solicita o token de acesso à API do Grafana
 printf "\nDigite o token:\n\n"
 read -r token
 [[ -z "${token}" ]] && exit_with_error "Token não pode ser vazio"
 
+# Solicita o nome do arquivo contendo os nomes dos folders
 printf "\nDigite o nome do arquivo contendo os nomes dos folders (ex: folders.txt):\n\n"
 read -r input_file
 [[ -z "${input_file}" ]] && exit_with_error "Nome do arquivo não pode ser vazio"
