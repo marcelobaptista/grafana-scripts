@@ -1,5 +1,3 @@
-version: "3.8"
-
 networks:
   monitoring:
     name: monitor
@@ -20,9 +18,7 @@ services:
     image: grafana/grafana:latest
     environment:
       - GF_PATHS_PROVISIONING=/etc/grafana/provisioning
-      # - GF_AUTH_BASIC_ENABLED=true
-      # - GF_ENABLE_GZIP=true
-      - GF_METRICS_ENABLED=true 
+      - GF_METRICS_ENABLED=true
       - GF_SECURITY_ADMIN_USER=admin
       - GF_SECURITY_ADMIN_PASSWORD=123456
       - GF_USERS_ALLOW_SIGN_UP=false
@@ -32,8 +28,8 @@ services:
       - GF_AUTH_DISABLE_LOGIN_FORM=false
 
     entrypoint:
-      - sh
-      - -euc
+      - /bin/sh
+      - -ec
       - |
         mkdir -p /etc/grafana/provisioning/datasources
         /run.sh

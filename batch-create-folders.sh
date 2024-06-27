@@ -4,12 +4,12 @@
 # Script para criar folders no Grafana usando sua API #
 #######################################################
 
-# Este script solicita a URL do Grafana, um token de acesso à API do Grafana 
+# Este script solicita a URL do Grafana, um token de acesso à API do Grafana
 # e o nome do arquivo contendo os nomes dos folders a serem criados.
 # O arquivo de entrada deve conter um nome de folder por linha.
 
-# Habilita o modo de saída de erro 
-set -e
+# Habilita o modo de saída de erro
+set -euo pipefail
 
 # Função para exibir mensagem de erro e sair
 exit_with_error() {
@@ -46,12 +46,10 @@ grafana_check_api() {
 
 # Função para criar folders
 create_folders() {
-    while IFS= read -r folder_name || [[ -n "$folder_name" ]]; do
+    while IFS= read -r folder_name || [[ -n "${folder_name}" ]]; do
         # Ignora linhas em branco
-        if [[ -z "$folder_name" ]]; then continue; fi
-
+        if [[ -z "${folder_name}" ]]; then continue; fi
         response=$(grafana_api_request "${grafana_url}/api/folders" "${token}" "${folder_name}")
-
         echo "Criando folder ${folder_name}"
 
         # Verifica se o folder foi criado com sucesso
@@ -63,16 +61,21 @@ create_folders() {
 
         # Verifica se houve erro ao criar o folder e exibe a mensagem de erro
         if [[ $(echo "${response}" | jq -e 'has("message")') == true ]]; then
-            if [[ $(echo "${response}" | jq -r '.message') == *"already exists"* ]]; then
-                echo "Folder ${folder_name} já existe"
-            elif [[ $(echo "${response}" | jq -r '.message') == "name cannot be empty" ]]; then
-                echo "O nome do folder não pode ser vazio"
-            else
-                [[ $(echo "${response}" | jq -r '.message') == *"need additional permissions"* ]]
+            case $(echo "${response}" | jq -r '.message') in
+            *"already exists"*)
+                echo "Folder '${folder_name}' já existe"
+                ;;
+            "name cannot be empty")
+                echo "O nome do folder '${folder_name}' não pode ser vazio"
+                ;;
+            *"need additional permissions")
                 exit_with_error "Token não tem permissão para criar folders"
-            fi
+                ;;
+            *)
+                exit_with_error "Erro ao criar folder '${folder_name}': $(echo "${response}" | jq -r '.message')"
+                ;;
+            esac
         fi
-
     done <"${input_file}"
 }
 
@@ -94,8 +97,7 @@ printf "\nDigite o nome do arquivo contendo os nomes dos folders (ex: folders.tx
 read -r input_file
 [[ -z "${input_file}" ]] && exit_with_error "Nome do arquivo não pode ser vazio"
 [[ ! -f "${input_file}" ]] && exit_with_error "Arquivo não encontrado"
-
-clear 
+clear
 
 # Desabilita o modo de saída de erro
 set +e

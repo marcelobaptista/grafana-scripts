@@ -1,13 +1,13 @@
 #!/bin/bash
 
-#####################################################################
-# Script para listar todos os dashboards do Grafana e gerar um CSV #
-#####################################################################
+###############################################################
+# Script para listar todos os teams do Grafana e gerar um CSV #
+###############################################################
 
 # Este script solicita a URL do Grafana, um token de acesso à API do Grafana 
-# e o nome do arquivo de saída. Em seguida, ele lista todos os dashboards disponíveis
+# e o nome do arquivo de saída. Em seguida, ele lista todos os teams disponíveis
 # no Grafana e os salva em um arquivo CSV com as seguintes colunas:
-# Folder;Dashboard;Version;createdBy;Created;UpdatedBy;Updated;URL
+# Name;Email;Id
 
 # Habilita o modo de saída de erro
 set -euo pipefail
@@ -39,17 +39,12 @@ grafana_api_request() {
     curl -sk -H "Authorization: Bearer ${token}" "${url}"
 }
 
-# Função para listar todos os dashboards
-list_dashboards() {
-    grafana_api_request "${grafana_url}/api/search?type=dash-db&limit=5000" "${token}" |
-        jq -r '.[].uid' >dashboards_uid.txt
-    while IFS= read -r uid; do
-        grafana_api_request "${grafana_url}/api/dashboards/uid/${uid}" "${token}" |
-            jq -r '. |
-"\(.meta.folderTitle);\(.dashboard.title);\(.meta.version);\(.meta.createdBy);\(.meta.created);\(.meta.updatedBy);\(.meta.updated);'"${grafana_url}"'\(.meta.url)"'
-    done <"dashboards_uid.txt" >"${file}.csv"
-    sed -i "1s/^/Folder;Dashboard;Version;createdBy;Created;UpdatedBy;Updated;URL\n/" "${file}.csv"
-    rm dashboards_uid.txt
+# Função para listar todos os teams
+list_grafana_teams() {
+    grafana_api_request "${grafana_url}/api/teams/search?" "${token}" |
+        jq -r '.teams[] | "\(.name);\(.email);\(.id)"' >"${file}.csv"
+    # Adiciona um cabeçalho ao arquivo CSV
+    sed -i "1s/^/Name;Email;Id\n/" "${file}.csv"
     printf "Arquivo %s${file}.csv gerado com sucesso: \n"
 }
 
@@ -80,4 +75,4 @@ grafana_check_api
 set -e
 
 # Lista os dashboards
-list_dashboards
+list_grafana_teams

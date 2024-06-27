@@ -7,8 +7,8 @@ function recreateContainers() {
     docker ps -a -q | xargs docker container rm -f >/dev/null 2>&1
     docker volume ls -q | xargs docker volume rm >/dev/null 2>&1
     docker volume prune -f >/dev/null 2>&1
-    docker-compose -f monitoring.yml up -d >/dev/null 2>&1
-    sleep 5
+    docker-compose -f monitoring.yml up -d
+    sleep 10
 }
 
 function updateOrg() {
