@@ -31,28 +31,30 @@ while IFS= read -r uid; do
     jq -r >dashboard.json
 
   #
+  folder_title=$(jq -r '.meta.folderTitle' dashboard.json)
   dashboard_title=$(jq -r '.dashboard.title' dashboard.json)
   panels_length=$(jq '.dashboard.panels | length' dashboard.json)
-
+  mkdir -p "./DashboardsPanels/${folder_title}"
+  folder="./DashboardsPanels/${folder_title}"
   #
   for ((i = 0; i < panels_length; i++)); do
     jq -r '.dashboard.panels['"${i}"']' dashboard.json >"${i}.json"
 
     #
     if jq -e '.targets != null and .targets != []' "${i}.json" >/dev/null; then
-      jq -r --arg dashboard_title "${dashboard_title}" \
-        '. |"\($dashboard_title);\(.title);\(.type);\(.targets[].datasource.uid);\(.targets[].expr)"' \
-        "${i}.json" >>panels.csv
+      jq -r '. |
+      "\(.title);\(.type);\(.targets[].datasource.uid);\(.targets[].expr)"' \
+        "${i}.json" >>"${folder}/${dashboard_title}.csv"
       rm -f "${i}.json"
     #
     else
-      jq -r --arg dashboard_title "${dashboard_title}" \
-        '. |"\($dashboard_title);\(.title);\(.type);N/A;N/A"' \
-        "${i}.json" >>panels.csv
+      jq -r '. | 
+      "\(.title);\(.type);N/A;N/A"' \
+        "${i}.json" >>"${folder}/${dashboard_title}.csv"
       rm -f "${i}.json"
     fi
   done
+  sort -u "${folder}/${dashboard_title}.csv" -o "${folder}/${dashboard_title}.csv"
+  sed -i "1s/^/Panel;Type;Datasource;Query\n/" "${folder}/${dashboard_title}.csv"
 done <dashboardsUID.txt
-sort -u panels.csv -o panels.csv
-sed -i "1s/^/Dashboard;Panel;Type;Datasource;Query\n/" panels.csv
 rm -f dashboard.json dashboardsUID.txt
