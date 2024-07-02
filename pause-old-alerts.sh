@@ -1,5 +1,15 @@
 #!/bin/bash
 
+#######################################################
+# Script para pausar alerts no Grafana usando sua API #
+#######################################################
+
+# Este script solicita a URL do Grafana, um token de acesso à API do Grafana
+# e pausa os alertas que estão em estado "Alerting", "Alerting (NoData)" ou "Error"
+
+# Habilita o modo de saída de erro
+set -euo pipefail
+
 token="" # Token de acesso ao Grafana
 grafana_url="" # URL do Grafana
 
@@ -24,7 +34,6 @@ curl -sk "${endpoint_alerts}" \
   -H "Authorization: Bearer ${token}" |
   jq -r >alerts.json
 
-
 # Seleciona alertas em status "Alerting", "Alerting (NoData)" ou "Error" com o prazo declarado em "activeat"
 jq -r --arg activeat "${activeat}" '
   .data.alerts[] |
@@ -34,9 +43,15 @@ jq -r --arg activeat "${activeat}" '
       .state == "Alerting (NoData)" or
       .state == "Error"
     ) and
-    (.activeAt | startswith($data))
+    (.activeAt | startswith($activeat))
   )
 ' alerts.json >alerting.json
+
+#
+if [ ! -s alerting.json ]; then
+  echo "Nenhum alerta encontrado."
+  exit 0
+fi
 
 # Lista os UID's dos alertas
 jq -r '.labels.alertruleuid' alerting.json >alertUIDs.txt
