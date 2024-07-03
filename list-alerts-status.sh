@@ -32,7 +32,7 @@ jq --arg grafana_url "${grafana_url}" '
 sort -u "${file}.csv" -o "${file}.csv"
 
 # Adiciona cabeçalho no arquivo .csv
-sed -i '' "1s/^/GrafanaFolder;AlertName;Url;ActiveAt\n/" "${file}.csv"
+sed -i "1s/^/GrafanaFolder;AlertName;Url;ActiveAt\n/" "${file}.csv"
 
 # Remove arquivos temporários
 rm -f {alerts,alerting}.json
