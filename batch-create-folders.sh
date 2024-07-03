@@ -11,102 +11,75 @@
 # Habilita o modo de saída de erro
 set -euo pipefail
 
-# Função para exibir mensagem de erro e sair
-exit_with_error() {
-    echo "Erro: $1"
-    exit 1
-}
+token="" # Token de acesso ao Grafana
+grafana_url="" # URL do Grafana
 
-# Função para fazer a solicitação à API Grafana
-grafana_api_request() {
-    local url="$1"
-    local token="$2"
-    local folder="$3"
-    curl -sk -X POST "${url}" \
-        -H "Accept: application/json" \
-        -H "Content-Type: application/json" \
-        -H "Authorization: Bearer ${token}" \
-        -d "{\"title\": \"${folder}\"}"
-}
+# Nome do arquivo contendo os nomes dos folders
+input_file="$1"
 
-# Função para testar o acesso à API do Grafana
-grafana_check_api() {
-    check_api=$(curl -sk -X GET "${grafana_url}/api/org" \
-        -H "Accept: application/json" \
-        -H "Content-Type: application/json" \
-        -H "Authorization: Bearer ${token}")
+# Verifica se o arquivo foi passado como argumento
+if [ $# -ne 1 ]; then
+  echo "Uso do script: $0 arquivo.txt"
+  exit 1
+fi
 
-    if [[ -z "${check_api}" ]]; then
-        exit_with_error "Verifique a URL fornecida"
-    fi
-    if [[ "${check_api}" == *"Invalid API key"* ]]; then
-        exit_with_error "Token inválido"
-    fi
-}
-
-# Função para criar folders
-create_folders() {
-    while IFS= read -r folder_name || [[ -n "${folder_name}" ]]; do
-        # Ignora linhas em branco
-        if [[ -z "${folder_name}" ]]; then continue; fi
-        response=$(grafana_api_request "${grafana_url}/api/folders" "${token}" "${folder_name}")
-        echo "Criando folder ${folder_name}"
-
-        # Verifica se o folder foi criado com sucesso
-        if [[ $(echo "${response}" | jq -e 'has("title")') == true ]]; then
-            if [[ $(echo "${response}" | jq -r '.title') == "${folder_name}" ]]; then
-                echo "Folder ${folder_name} criado com sucesso"
-            fi
-        fi
-
-        # Verifica se houve erro ao criar o folder e exibe a mensagem de erro
-        if [[ $(echo "${response}" | jq -e 'has("message")') == true ]]; then
-            case $(echo "${response}" | jq -r '.message') in
-            *"already exists"*)
-                echo "Folder '${folder_name}' já existe"
-                ;;
-            "name cannot be empty")
-                echo "O nome do folder '${folder_name}' não pode ser vazio"
-                ;;
-            *"need additional permissions")
-                exit_with_error "Token não tem permissão para criar folders"
-                ;;
-            *)
-                exit_with_error "Erro ao criar folder '${folder_name}': $(echo "${response}" | jq -r '.message')"
-                ;;
-            esac
-        fi
-    done <"${input_file}"
-}
+# Verifica se o arquivo existe
+if [ ! -f "${input_file}" ]; then
+  echo "Arquivo não encontrado: ${input_file}"
+  exit 1
+fi
 
 # Menu de opções
 clear
 
-# Solicita a URL do Grafana
-printf "Digite a URL do Grafana (ex: http://127.0.0.1:3000)\n\n"
-read -r grafana_url
-[[ -z "${grafana_url}" ]] && exit_with_error "URL do Grafana não pode ser vazia"
-
-# Solicita o token de acesso à API do Grafana
-printf "\nDigite o token:\n\n"
-read -r token
-[[ -z "${token}" ]] && exit_with_error "Token não pode ser vazio"
-
-# Solicita o nome do arquivo contendo os nomes dos folders
-printf "\nDigite o nome do arquivo contendo os nomes dos folders (ex: folders.txt):\n\n"
-read -r input_file
-[[ -z "${input_file}" ]] && exit_with_error "Nome do arquivo não pode ser vazio"
-[[ ! -f "${input_file}" ]] && exit_with_error "Arquivo não encontrado"
-clear
-
-# Desabilita o modo de saída de erro
-set +e
-
 # Verifica se a URL e o token são válidos
-grafana_check_api
+check_api=$(curl -sk "${grafana_url}/api/org" \
+    -H "Accept: application/json" \
+    -H "Content-Type: application/json" \
+    -H "Authorization: Bearer ${token}")
 
-# Habilita o modo de saída de erro novamente
-set -e
+if [[ -z "${check_api}" ]]; then
+    echo "Verifique a URL fornecida"
+    exit 1
+fi
 
-# Cria folders
-create_folders
+if [[ "${check_api}" == *"Invalid API key"* ]]; then
+    echo "Token inválido"
+    exit 1
+fi
+
+# Loop para ler cada linha do arquivo e criar os folders
+while IFS= read -r folder_name || [[ -n "${folder_name}" ]]; do
+    # Ignora linhas em branco
+    if [[ -z "${folder_name}" ]]; then continue; fi
+    response=$(curl -sk -X POST "${grafana_url}/api/folders" \
+        -H "Accept: application/json" \
+        -H "Content-Type: application/json" \
+        -H "Authorization: Bearer ${token}" \
+        -d "{\"title\": \"${folder_name}\"}")
+
+    # Verifica se o folder foi criado com sucesso
+    if [[ $(echo "${response}" | jq -e 'has("title")') == true ]]; then
+        if [[ $(echo "${response}" | jq -r '.title') == "${folder_name}" ]]; then
+            echo "Folder ${folder_name} criado com sucesso"
+        fi
+    fi
+
+    # Verifica se houve erro ao criar o folder e exibe a mensagem de erro
+    if [[ $(echo "${response}" | jq -e 'has("message")') == true ]]; then
+        case $(echo "${response}" | jq -r '.message') in
+        *"already exists"*)
+            echo "Folder '${folder_name}' já existe"
+            ;;
+        "name cannot be empty")
+            echo "O nome do folder '${folder_name}' não pode ser vazio"
+            ;;
+        *"need additional permissions")
+            echo "Token não tem permissão para criar folders"
+            ;;
+        *)
+            echo "Erro ao criar folder '${folder_name}': $(echo "${response}" | jq -r '.message')"
+            ;;
+        esac
+    fi
+done < "${input_file}" # Lê o arquivo de entrada

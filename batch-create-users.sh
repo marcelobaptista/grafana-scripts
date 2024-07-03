@@ -4,39 +4,31 @@
 # Script para criar usuários no Grafana usando sua API #
 ########################################################
 
-# Este script solicita a URL do Grafana, senha de admin do Grafana
+# Este script solicita a senha de admin do Grafana
 # e o nome do arquivo csv para criação dos usuários.
 # O arquivo csv deve conter nome, email, nome de login, senha e orgId
 
 # Habilita o modo de saída de erro
 set -euo pipefail
 
-# Função para exibir mensagem de erro e sair
-exit_with_error() {
-  echo "Erro: $1"
-  exit 1
-}
-
 # Verifica se o arquivo CSV foi passado como argumento
 if [ $# -ne 1 ]; then
-  echo "Uso: $0 arquivo.csv"
+  echo "Uso do script: $0 arquivo.csv"
   exit 1
 fi
 
-# Solicita a URL do Grafana
-printf "Digite a URL do Grafana (ex: http://127.0.0.1:3000)\n\n"
-read -r grafana_url
-[[ -z "${grafana_url}" ]] && exit_with_error "URL do Grafana não pode ser vazia"
+grafana_url="" # URL do Grafana
 
 # Solicita o token de acesso à API do Grafana
 printf "\nDigite a senha de admin:\n\n"
 read -r password
-[[ -z "${password}" ]] && exit_with_error "Senha não pode ser vazia"
+[[ -z "${password}" ]] && echo "Erro: Senha não pode ser vazia" && exit 1
 
+# Codifica o usuário e senha para base64
 auth_basic=$(echo -n "admin:${password}" | base64)
 
 # Loop através das linhas do arquivo CSV, excluindo o cabeçalho
-tail -n +2 "$1" | while IFS=',' read -r name email login user_password orgid; do
+while IFS=',' read -r name email login user_password orgid; do
   # Monta o JSON para cada linha do CSV
   json_data=$(
     cat <<EOF
@@ -55,7 +47,7 @@ EOF
     -H "Accept: application/json" \
     -H "Authorization: Basic ${auth_basic}" \
     -H "Content-Type: application/json" \
-    -d "${json_data}" 2>&1) # Redireciona stderr para stdout para capturar mensagens de erro
+    -d "${json_data}" 2>&1)
 
   # Verifica o tipo de resposta usando case
   case "${response}" in
@@ -64,10 +56,13 @@ EOF
     ;;
   *"permissions needed"*)
     echo "Verifique se tem permissões suficientes"
-    exit_with_error
+    echo "Resposta da API: ${response}"
+    exit 1
     ;;
   *"Invalid username or password"*)
-    exit_with_error "Usuário ou senha inválidos"
+    echo "Erro: Usuário ou senha inválidos"
+    echo "Resposta da API: ${response}"
+    exit 1
     ;;
   *)
     # Tenta extrair o id do usuário da resposta usando jq
@@ -82,4 +77,4 @@ EOF
     fi
     ;;
   esac
-done
+done<"$1" # Lê o arquivo CSV fornecido como argumento
