@@ -1,6 +1,6 @@
 #!/bin/bash
 
-set -e
+set -eo pipefail
 grafana_url="http://127.0.0.1:3000"
 
 function recreateContainers() {
@@ -9,6 +9,12 @@ function recreateContainers() {
     docker volume prune -f >/dev/null 2>&1
     docker-compose -f monitoring.yml up -d
     sleep 10
+}
+
+function createPrometheusFiles() {
+    docker cp ./prometheus.yml prometheus:/etc/prometheus/prometheus.yml >/dev/null 2>&1
+    docker cp ./prometheus.yml prometheus:/etc/prometheus/prometheus.yml >/dev/null 2>&1
+    docker container restart prometheus >/dev/null 2>&1
 }
 
 function updateOrg() {
@@ -31,29 +37,16 @@ function createServiceAccount() {
 function createToken() {
     token_key=$(
         curl -sk -X POST "${grafana_url}/api/serviceaccounts/${service_account_id}/tokens" \
-            -H "Authorization: Basic YWRtaW46MTIzNDU2" \
-            -H "Content-Type: application/json" \
-            -d "{\"name\":\"token-sa-${service_account_id}\"}" |
+            -H 'Authorization: Basic YWRtaW46MTIzNDU2' \
+            -H 'Content-Type: application/json' \
+            -d '{"name":"token-sa-'"${service_account_id}"'"}' |
             jq -r '.key'
     )
-    printf "token: %s\n" "${service_account_id}" "${token_key}" >tokeinAPI.txt
+    echo "${token_key}" >tokeinAPI.txt
 }
 
 function createDatasources() {
-    docker exec -i grafana sh -c 'cat <<EOF > /etc/grafana/provisioning/datasources/datasources.yaml
-apiVersion: 1
-datasources:
-  - name: Prometheus
-    type: prometheus
-    access: proxy
-    orgId: 1
-    uid: prometheus
-    url: http://prometheus:9090
-    basicAuth: false
-    isDefault: true
-    version: 1
-    editable: false
-EOF'
+    docker cp ./datasources.yml grafana:/etc/grafana/provisioning/datasources/datasources.yml >/dev/null 2>&1
     docker container restart grafana >/dev/null 2>&1
 }
 
@@ -64,12 +57,19 @@ function createDashboard() {
         -d "@k6.json" >/dev/null 2>&1
 }
 
-if recreateContainers; then
-    docker container ls --format '{{.Names}}' |
-        sort | sed 's/^/Container /' | sed 's/$/ created/'
-fi
+recreateContainers
+if createPrometheusFiles; then printf "\nPrometheus files created\n"; fi
 if updateOrg; then printf "Organization updated\n"; fi
 if createServiceAccount; then printf "Service Account created\n"; fi
 if createToken; then printf "Token created\n"; fi
 if createDashboard; then printf "Dashboard created\n"; fi
-if createDatasources; then printf "Datasource created\n"; fi
+if createDatasources; then printf "Datasource created\\nn"; fi
+cat <<EOF
++++++++++++++++++++++++++++++++++++++++++++++++++++++++
+Grafana URL: ${grafana_url}
+User: admin / Password: 123456
+Token: $(cat tokeinAPI.txt)
++++++++++++++++++++++++++++++++++++++++++++++++++++++++
+Alertmanager URL: http://127.0.0.1:9093
+Prometheus URL: http://127.0.0.1:9090
+EOF

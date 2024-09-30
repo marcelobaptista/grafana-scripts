@@ -1,17 +1,22 @@
 #!/bin/bash
 
-# Script para fornecer uma lista CSV dos alertas que estão no status "Alerting" ou "Error"
+# Script para fornecer uma lista CSV dos alertas que estão no status "Alerting","Alerting (NoData)"" ou "Error"
+# Pode também selecionar alertas em status "Normal (NoData)" e "Normal"
 
-token=""
+grafana_token=""
 grafana_url=""
 file=""
 
 # Lista os alertas ativos e devidos status
 curl -sk "${grafana_url}/api/prometheus/grafana/api/v1/alerts?includeInternalLabels=true" \
-  -H "Authorization: Bearer ${token}" | jq -r >alerts.json
+  -H 'Accept: application/json' \
+  -H "Authorization: Bearer ${grafana_token}" \
+  -H 'Content-Type: application/json' |
+  jq -r >alerts.json
+
+if [ ! -s alerts.json ];then echo "Verificar url e token" && exit 1;fi
 
 # Seleciona alertas em status "Alerting", "Alerting (NoData)" ou "Error"
-# Pode também adicionar "Normal (NoData)" e "Normal"
 jq -r '
   .data.alerts[] | 
   select(
@@ -28,11 +33,11 @@ jq --arg grafana_url "${grafana_url}" '
   . | 
   "\(.labels.grafana_folder);\(.labels.alertname);${grafana_url}/alerting/\(.labels.__alert_rule_uid__)/edit?;\(.activeAt)"' alerting.json >"${file}.csv"
 
-# Remove duplicatas, pois uma regra de alerta pode conter mais de uma instância
-sort -u "${file}.csv" -o "${file}.csv"
+# Remove duplicatas, pois uma regra de alerta pode conter mais de uma query
+sort -ut ";" -k 1 "${file}.csv" -o "${file}.csv"
 
 # Adiciona cabeçalho no arquivo .csv
-sed -i "1s/^/GrafanaFolder;AlertName;Url;ActiveAt\n/" "${file}.csv"
+sed -i '' "1s/^/GrafanaFolder;AlertName;Url;ActiveAt\n/" "${file}.csv"
 
 # Remove arquivos temporários
 rm -f {alerts,alerting}.json

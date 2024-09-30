@@ -42,4 +42,3 @@ Este script Bash automatiza a configuração inicial do Grafana e Prometheus usa
 - Certifique-se de que as portas necessárias (3000 para Grafana, 9090 para Prometheus) não estão sendo usadas por outros serviços.
 - Você pode ajustar as configurações do Grafana e do Prometheus editando o arquivo `monitoring.yml`.
 - O dashboard (`k6.json`) importado para o Grafana deve estar presente no mesmo diretório que este script.
-
