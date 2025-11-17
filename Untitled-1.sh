@@ -39,7 +39,7 @@ elif grep -iq "Access denied" "dashboards.json" || grep -iq "Permissions needed"
 fi
 
 # Cria lista de UIDs dos dashboards
-jq -r '.[].uid' dashboards.json >dashboards_uid.txt
+jq -r '.[].uid' dashboards.json > dashboards_uid.txt
 
 # Itera sobre cada UID e extrai informações
 while IFS= read -r uid; do
@@ -49,7 +49,7 @@ while IFS= read -r uid; do
     -H "Accept: application/json" \
     -H "Authorization: Bearer ${grafana_token}" \
     -H "Content-Type: application/json" \
-    | jq -r >temp.json
+    | jq -r > temp.json
 
   # Extrai título do folder, título do dashboard e URL do dashboard
   folder_title=$(jq -r '.meta.folderTitle' temp.json)
@@ -67,7 +67,7 @@ while IFS= read -r uid; do
 
   # Loop através de todos os painéis do dashboard
   for ((i = 0; i < panels_length; i++)); do
-    jq -r '.dashboard.panels['"${i}"']' temp.json >"${i}.json"
+    jq -r '.dashboard.panels['"${i}"']' temp.json > "${i}.json"
 
     # Ignora painéis do tipo "row"
     if jq -e '.type == "row"' "${i}.json" >/dev/null; then
@@ -78,53 +78,7 @@ while IFS= read -r uid; do
     # Se tiver targets, lista normalmente, mas trata array e objeto
     if jq -e '.targets != null and .targets != []' "${i}.json" >/dev/null; then
 
-      # Verifica se targets é array
-      if jq -e '(.targets | type) == "array"' "${i}.json" >/dev/null; then
-        jq -r \
-          --arg folder_title "${folder_title}" \
-          --arg dashboard_title "${dashboard_title}" \
-          --arg dashboard_url "${dashboard_url}" \
-          --arg grafana_url "${grafana_url}" \
-          '
-            . as $panel |
-            ($folder_title) + ";" +
-            ($dashboard_title) + ";" +
-            ($panel.title // "-") + ";" +
-            ($grafana_url + $dashboard_url + "?&viewPanel=" + ($panel.id|tostring)) + ";" +
-            (if ($panel.datasource | type) == "object"
-                then ($panel.datasource.type // "-")
-                else ($panel.datasource // "-")
-            end) + ";" +
-            (if ($panel.targets and ($panel.targets | length) > 0 and
-                $panel.targets[0].datasource and
-                ($panel.targets[0].datasource | type) == "object")
-                then ($panel.targets[0].datasource.uid // "-")
-                else "-"
-            end) + ";" +
-            ($panel.type // "-")
-            ' "${i}.json" >>"${folder_destination}/panels.csv"
-      else
-
-        # targets é objeto, não array
-        #
-        jq -r \
-          --arg folder_title "${folder_title}" \
-          --arg dashboard_title "${dashboard_title}" \
-          --arg dashboard_url "${dashboard_url}" \
-          --arg grafana_url "${grafana_url}" \
-          '
-            . as $panel |
-            ($folder_title) + ";" +
-            ($dashboard_title) + ";" +
-            ($panel.title // "-") + ";" +
-            ($grafana_url + $dashboard_url + "?&viewPanel=" + ($panel.id|tostring)) + ";" +
-            (if ($panel.datasource | type) == "object" then ($panel.datasource.type // "-") else ($panel.datasource // "-") end) + ";" +
-            ($panel.type // "-") + ";N/A"
-            ' "${i}.json" >>"${folder_destination}/panels.csv"
-      fi
-    else
-      # Não tem targets
-      #
+      # Aqui verifica se targets é um array e contém datasource válido
       jq -r \
         --arg folder_title "${folder_title}" \
         --arg dashboard_title "${dashboard_title}" \
@@ -134,11 +88,55 @@ while IFS= read -r uid; do
           . as $panel |
           ($folder_title) + ";" +
           ($dashboard_title) + ";" +
-          ($grafana_url + $dashboard_url + "?viewPanel=" + ($panel.id|tostring)) + ";" +
           ($panel.title // "-") + ";" +
-          (if ($panel.datasource | type) == "object" then ($panel.datasource.type // "-") else ($panel.datasource // "-") end) + ";" +
-          ($panel.type // "-") + ";N/A"
-          ' "${i}.json" >>"${folder_destination}/panels.csv"
+          ($grafana_url + $dashboard_url + "?&viewPanel=" + ($panel.id|tostring)) + ";" +
+
+          # Aqui verifica se existe o datasource no primeiro target
+          (if ($panel.targets and ($panel.targets | length) > 0 and
+              $panel.targets[0].datasource and
+              ($panel.targets[0].datasource | type) == "object")
+              then ($panel.targets[0].datasource.uid // "-")
+              else "-"
+          end) + ";" +
+
+          # Preenche datasourceType (aqui considerando o datasource do painel principal)
+          (if ($panel.datasource | type) == "object"
+              then ($panel.datasource.type // "-")
+              else ($panel.datasource // "-")
+          end) + ";" +
+
+          # Preenche o tipo do painel
+          ($panel.type // "-")
+        ' "${i}.json" >> "${folder_destination}/panels.csv"
+    else
+      # Se não tiver targets, pega diretamente o datasource do painel
+      jq -r \
+        --arg folder_title "${folder_title}" \
+        --arg dashboard_title "${dashboard_title}" \
+        --arg dashboard_url "${dashboard_url}" \
+        --arg grafana_url "${grafana_url}" \
+        '
+          . as $panel |
+          ($folder_title) + ";" +
+          ($dashboard_title) + ";" +
+          ($panel.title // "-") + ";" +
+          ($grafana_url + $dashboard_url + "?viewPanel=" + ($panel.id|tostring)) + ";" +
+
+          # Se não tiver targets, pega o datasource principal do painel
+          (if ($panel.datasource | type) == "object" and ($panel.datasource.uid != null)
+              then ($panel.datasource.uid)
+              else "-"
+           end) + ";" +
+
+          # Preenche datasourceType
+          (if ($panel.datasource | type) == "object"
+              then ($panel.datasource.type // "-")
+              else ($panel.datasource // "-")
+           end) + ";" +
+
+          # Preenche o tipo do painel
+          ($panel.type // "-")
+        ' "${i}.json" >> "${folder_destination}/panels.csv"
     fi
 
     # Remove o arquivo temporário do painel
@@ -150,12 +148,12 @@ while IFS= read -r uid; do
   sort -u -o "${folder_destination}/panels.csv" "${folder_destination}/panels.csv"
 
   # Adiciona o cabeçalho no arquivo gerado
-  sed -i "1s/^/dashboardFolder;dashboardName;panelTitle;url;datasourceType;datasourceUid;panelType\n/" "${folder_destination}/panels.csv"
+  sed -i "1s/^/dashboardFolder;dashboardName;panelTitle;url;datasourceUid;datasourceType;panelType\n/" "${folder_destination}/panels.csv"
 
   # Remove o arquivo temporário do dashboard
   rm -f temp.json
 
-done <dashboards_uid.txt
+done < dashboards_uid.txt
 
 # Remove arquivos temporários
 rm -rf dashboards{.json,_uid.txt}

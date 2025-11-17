@@ -6,11 +6,11 @@ token=""       # token de acesso ao Grafana
 grafana_url="" # URL do Grafana
 
 # Endpoints para alert rules e rule groups
-endpoint_alert_rules="${grafana_url}/api/v1/provisioning/alert-rules"
-endpoint_rule_groups="${grafana_url}/api/v1/provisioning/folder/${folderUID}/rule-groups"
+grafana_api_alert_rules="${grafana_url}/api/v1/provisioning/alert-rules"
+grafana_api_rule_groups="${grafana_url}/api/v1/provisioning/folder/${folderUID}/rule-groups"
 
 # Lista todas as regras de alerta configuradas
-curl -sk "${endpoint_alert_rules}" \
+curl -sk "${grafana_api_alert_rules}" \
   -H "Accept: application/json" \
   -H "Content-Type: application/json" \
   -H "Authorization: Bearer ${token}" |
@@ -26,7 +26,7 @@ jq -r --arg folderUID "${folderUID}" \
 
 # Loop para cada UID
 while IFS= read -r uid; do
-  curl -sk "${endpoint_alert_rules}/${uid}" \
+  curl -sk "${grafana_api_alert_rules}/${uid}" \
     -H "Authorization: Bearer ${token}" |
     jq -r >temp.json
 
@@ -38,7 +38,7 @@ while IFS= read -r uid; do
   )
 
   # Atualiza a regra de alerta no Grafana
-  curl -sk -X PUT "${endpoint_alert_rules}/${uid}" \
+  curl -sk -X PUT "${grafana_api_alert_rules}/${uid}" \
     -H "Accept: application/json" \
     -H "Content-Type: application/json" \
     -H "Authorization: Bearer ${token}" \
@@ -48,7 +48,7 @@ done <"uids.txt"
 
 while IFS= read -r rulegroup; do
   # Tratamento de espaços na URL
-  url="${endpoint_rule_groups}/${rulegroup}"
+  url="${grafana_api_rule_groups}/${rulegroup}"
   url="${url// /%20}"
 
   # Atualiza rule groupos, pois alert rules se tornam não editáveis

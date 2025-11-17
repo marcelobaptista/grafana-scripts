@@ -1,49 +1,87 @@
 #!/bin/bash
 
-#####################################################################
-# Script para listar todos os dashboards do Grafana e gerar um CSV #
-#####################################################################
-
-# Este script solicita a URL do Grafana, um token de acesso à API do Grafana
-# e o nome do arquivo de saída. Em seguida, ele lista todos os dashboards disponíveis
-# no Grafana e os salva em um arquivo CSV com as seguintes colunas:
-# Folder;Dashboard;Version;createdBy;Created;UpdatedBy;Updated;URL
-
 # Habilita o modo de saída de erro
 set -euo pipefail
 
-# Verifica se o arquivo a ser criado foi passado como argumento
-if [ $# -ne 1 ]; then
-    echo "Uso do script: $0 nome_do_arquivo_a_ser_criado"
+# Verifica se a url e o token foram passados como argumentos
+if [ $# -lt 2 ]; then
+    printf "\nUso do script: %s <grafana_url> <grafana_token>\n" "$0"
     exit 1
 fi
 
-# Remove o arquivo se ele existir
-if [ -f "$1.csv" ]; then
-  rm -f "$1.csv"
-  echo "Arquivo removido: $1.csv"
+# Argumentos passados para o script
+grafana_url=$1
+grafana_token=$2
+
+# Define a data atual
+date_now=$(date +%Y-%m-%d)
+
+# Arquivo de saída
+output_file="${date_now}-grafana-dashboards.csv"
+
+# Consulta API do Grafana para obter a lista de dashboards e salva os UIDs em um arquivo
+if ! curl -sk "${grafana_url}/api/search?type=dash-db&limit=5000" \
+    -H "Accept: application/json" \
+    -H "Authorization: Bearer ${grafana_token}" \
+    -H "Content-Type: application/json" \
+    -o "dashboards.json"; then
+    printf "\nErro: falha na conexão com a URL ou problema de resolução DNS.\n"
+    rm -f "dashboards.json"
+    exit 1
 fi
 
-token="" # Token de acesso ao Grafana
-grafana_url="" # URL do Grafana
+# Verifica se o token é inválido ou sem permissão suficiente
+if grep -iq "invalid API key" "dashboards.json"; then
+    printf "\nErro: chave de API inválida.\n"
+    rm -f "dashboards.json"
+    exit 1
+elif grep -iq "Access denied" "dashboards.json" || grep -iq "Permissions needed" "dashboards.json"; then
+    printf "\nErro: token sem permissão suficiente.\n"
+    rm -f "dashboards.json"
+    exit 1
+fi
 
-# Consulta a API do Grafana para obter a lista de dashboards e salva os UIDs em um arquivo
-curl -sk "${grafana_url}/api/search?type=dash-db&limit=5000" \
-    -H "Accept: application/json" \
-    -H "Authorization: Bearer ${token}" \
-    -H "Content-Type: application/json" |
-    jq -r '.[] | .uid' >dashboards_uid.txt
+# Cria lista de UIDs dos dashboards
+jq -r '.[].uid' dashboards.json >dashboards_uid.txt
 
+# Itera sobre cada UID e extrai informações
 while IFS= read -r uid; do
-    # Consulta a API para obter informações sobre o dashboard e salva em um arquivo JSON
-    curl -sk "${grafana_url}/api/dashboards/uid/${uid}" \
+
+    # Salva o dashboard em um arquivo temporário
+    curl -# -sk "${grafana_url}/api/dashboards/uid/${uid}" \
         -H "Accept: application/json" \
-        -H "Authorization: Bearer ${token}" \
-        -H "Content-Type: application/json" |
-        jq -r '
-. |
-"\(.meta.folderTitle);\(.dashboard.title);\(.meta.version);\(.meta.createdBy);\(.meta.created);\(.meta.updated);\(.meta.updatedBy);'"${grafana_url}"'\(.meta.url)"
-' >>"$1.csv"
+        -H "Authorization: Bearer ${grafana_token}" \
+        -H "Content-Type: application/json" \
+        | jq -r >temp.json
+
+    # Extrai as informações e adiciona ao arquivo CSV
+    jq -r --arg grafana_url "${grafana_url}" \
+        '. |
+        (.meta.folderTitle | tostring) + ";" +
+        (.dashboard.title | tostring) + ";" +
+        ($grafana_url) + (.meta.url) + ";" +
+        (.dashboard.time.from | tostring) + ";" +
+        (.dashboard.time.to | tostring) + ";" +
+        (.dashboard.refresh | tostring) + ";" +
+        (.meta.created | tostring) + ";" +
+        (.meta.createdBy | tostring) + ";" +
+        (.meta.updated | tostring) + ";" +
+        (.meta.updatedBy | tostring) + ";" +
+        (.dashboard.editable // true | tostring) + ";" +
+        (.meta.provisioned // false | tostring)
+    ' temp.json >>"${output_file}"
+
+    # Remove arquivo temporário
+    rm -f temp.json
 done <"dashboards_uid.txt"
-sed -i "1s/^/Folder;Dashboard;Version;createdBy;Created;Updated;UpdatedBy;URL\n/" "$1.csv"
-rm dashboards_uid.txt
+
+# Remove linhas duplicadas, se houver
+sort -u "${output_file}" -o "${output_file}"
+
+# Adiciona um cabeçalho no arquivo CSV
+sed -i '1i\
+folderTitle;dashboardTitle;url;timeFrom;timeTo;refresh;created;createdBy;updated;updatedBy;editable;provisioned
+' "${output_file}"
+
+# Remove arquivos temporários
+rm -f dashboards{_uid.txt,_uid.json,.json}
