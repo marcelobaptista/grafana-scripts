@@ -88,10 +88,10 @@ while IFS= read -r uid; do
   # que possibilita a importação pela interface web do Grafana
   jq -r '
   {meta:.meta}+.dashboard
-  ' tmp.json >"${folder_destination_webui}/${folder_title}/${dashboard_title_sanitized}.json"
+  ' tmp.json >"${folder_destination_webui}/${folder_title}/${dashboard_title_sanitized}-${uid}.json"
 
   # Registra no log
-  logging "${dashboard_title}" "${uid}" "${folder_destination_webui}/${folder_title}/${dashboard_title_sanitized}.json"
+  logging "${dashboard_title}" "${uid}" "${folder_destination_webui}/${folder_title}/${dashboard_title_sanitized}-${uid}.json"
 
   # Cria diretório para salvar o dashboard na estrutura da API do Grafana
   mkdir -p "${folder_destination_api}/${folder_title}"
@@ -102,10 +102,10 @@ while IFS= read -r uid; do
     . |= (.folderUid=.meta.folderUid) 
     |del(.meta) 
     |del(.dashboard.id) + {overwrite: true}
-    ' tmp.json >"${folder_destination_api}/${folder_title}/${dashboard_title_sanitized}.json"
+    ' tmp.json >"${folder_destination_api}/${folder_title}/${dashboard_title_sanitized}-${uid}.json"
 
   # Registra no log
-  logging "${dashboard_title}" "${uid}" "${folder_destination_api}/${folder_title}/${dashboard_title_sanitized}.json"
+  logging "${dashboard_title}" "${uid}" "${folder_destination_api}/${folder_title}/${dashboard_title_sanitized}-${uid}.json"
 
   # Remove o arquivo temporário
   rm -f tmp.json

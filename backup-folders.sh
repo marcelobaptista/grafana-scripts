@@ -76,10 +76,10 @@ while IFS= read -r folder_uid; do
   folder_title=$(jq -r '.url' -- "${folder_uid}.json" | awk -F'/' '{print $NF}')
 
   # Renomeia o arquivo e move para o diretório de backup
-  mv -- "${folder_uid}.json" "${folder_destination}/${folder_title}.json"
+  mv -- "${folder_uid}.json" "${folder_destination}/${folder_title}-${folder_uid}.json"
 
   # Registra no log
-  logging "${folder_title}" "${folder_uid}" "${folder_destination}/${folder_title}.json"
+  logging "${folder_title}" "${folder_uid}" "${folder_destination}/${folder_title}-${folder_uid}.json"
 
 done <folders_uid.txt
 

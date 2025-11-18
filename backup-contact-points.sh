@@ -79,10 +79,10 @@ while IFS= read -r uid; do
   jq -r --arg uid "${uid}" '
     .[] | 
     select(.uid == $uid)
-    ' contact_points.json >"${folder_destination}/${contact_point_name}.json"
+    ' contact_points.json >"${folder_destination}/${contact_point_name}-${uid}.json"
 
   # Registra no log
-  logging "${contact_point_name}" "${uid}" "${folder_destination}/${contact_point_name}.json"
+  logging "${contact_point_name}" "${uid}" "${folder_destination}/${contact_point_name}-${uid}.json"
 
 done <contact_points_uid.txt
 

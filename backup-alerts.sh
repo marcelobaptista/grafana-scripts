@@ -120,10 +120,10 @@ while IFS=';' read -r folder_uid folder_title; do
       -H "Accept: application/json" \
       -H "Authorization: Bearer ${grafana_token}" \
       -H "Content-Type: application/json" \
-      | jq 'del(.id)' >"${folder_destination}/${folder_title}/${alert_title}.json"
+      | jq 'del(.id)' >"${folder_destination}/${folder_title}/${alert_title}-${alert_uid}.json"
 
     # Registra no log
-    logging "${alert_title}" "${alert_uid}" "${folder_destination}/${folder_title}/${alert_title}.json"
+    logging "${alert_title}" "${alert_uid}" "${folder_destination}/${folder_title}/${alert_title}-${alert_uid}.json"
 
   done
   

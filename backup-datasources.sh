@@ -78,10 +78,10 @@ while IFS= read -r datasource_uid; do
     '.[] | 
     select(.uid == "'"${datasource_uid}"'") | 
     del(.id)
-    ' datasources.json >"${folder_destination}/${datasource_name}.json"
+    ' datasources.json >"${folder_destination}/${datasource_name}-${datasource_uid}.json"
 
   # Registra no log
-  logging "${datasource_name}" "${datasource_uid}" "${folder_destination}/${datasource_name}.json"
+  logging "${datasource_name}" "${datasource_uid}" "${folder_destination}/${datasource_name}-${datasource_uid}.json"
 
 done <datasources_uid.txt
 
