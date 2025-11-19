@@ -3,58 +3,159 @@
 # Habilita o modo de saída de erro
 set -euo pipefail
 
-# Solicita a URL do Grafana
-printf "Digite a URL do Grafana (ex: http://127.0.0.1:3000)\n\n"
-read -r grafana_url
-[[ -z "${grafana_url}" ]] && exit_with_error "URL do Grafana não pode ser vazia"
+# Verifica se a url e o token foram passados como argumentos
+if [ $# -lt 2 ]; then
+  printf "\nUso do script: %s <grafana_url> <grafana_token>\n" "$0"
+  exit 1
+fi
 
-# # Solicita o token de acesso à API do Grafana
-printf "\nDigite o token:\n\n"
-read -r token
-[[ -z "${token}" ]] && exit_with_error "Token não pode ser vazio"
+# Argumentos passados para o script
+grafana_url=$1
+grafana_token=$2
 
-clear
+# Define a data atual
+date_now=$(date +%Y-%m-%d)
 
-# Lista todos os dashboards
-curl -k "${grafana_url}/api/search?type=dash-db&limit=5000" \
+# Consulta API do Grafana e extrai todos dashboards configurados, com tratamento de erro de conexão
+if ! curl -sk "${grafana_url}/api/search?type=dash-db&limit=5000" \
   -H "Accept: application/json" \
+  -H "Authorization: Bearer ${grafana_token}" \
   -H "Content-Type: application/json" \
-  -H "Authorization: Bearer ${token}" |
-  jq -r '.[].uid' >dashboardsUID.txt
+  -o "dashboards.json"; then
+  printf "\nErro: falha na conexão com a URL ou problema de resolução DNS.\n"
+  rm -f "dashboards.json"
+  exit 1
+fi
 
-#
+# Verifica se o token é inválido ou sem permissão suficiente
+if grep -iq "invalid API key" "dashboards.json"; then
+  printf "\nErro: chave de API inválida.\n"
+  rm -f "dashboards.json"
+  exit 1
+elif grep -iq "Access denied" "dashboards.json" || grep -iq "Permissions needed" "dashboards.json"; then
+  printf "\nErro: token sem permissão suficiente.\n"
+  rm -f "dashboards.json"
+  exit 1
+fi
+
+# Cria lista de UIDs dos dashboards
+jq -r '.[].uid' dashboards.json >dashboards_uid.txt
+
+# Itera sobre cada UID e extrai informações
 while IFS= read -r uid; do
-  curl -k "${grafana_url}/api/dashboards/uid/${uid}" \
+
+  # Salva o dashboard em um arquivo temporário
+  curl -# -sk "${grafana_url}/api/dashboards/uid/${uid}" \
     -H "Accept: application/json" \
-    -H "Content-Type: application" \
-    -H "Authorization: Bearer ${token}" |
-    jq -r >dashboard.json
+    -H "Authorization: Bearer ${grafana_token}" \
+    -H "Content-Type: application/json" \
+    | jq -r >temp.json
 
-  #
-  folder_title=$(jq -r '.meta.folderTitle' dashboard.json)
-  dashboard_title=$(jq -r '.dashboard.title' dashboard.json)
-  panels_length=$(jq '.dashboard.panels | length' dashboard.json)
-  mkdir -p "./DashboardsPanels/${folder_title}"
-  folder="./DashboardsPanels/${folder_title}"
-  #
+  # Extrai título do folder, título do dashboard e URL do dashboard
+  folder_title=$(jq -r '.meta.folderTitle' temp.json)
+  dashboard_title=$(jq -r '.dashboard.title' temp.json)
+  dashboard_url=$(jq -r '.meta.url' temp.json)
+
+  # Extrai número de painéis no dashboard
+  panels_length=$(jq -r '.dashboard.panels | length' temp.json)
+
+  # Cria a pasta de destino para os arquivos CSV
+  mkdir -p "${date_now}-panels/${folder_title}"
+
+  # Define a pasta de destino para os arquivos CSV
+  folder_destination="${date_now}-panels/${folder_title}"
+
+  # Loop através de todos os painéis do dashboard
   for ((i = 0; i < panels_length; i++)); do
-    jq -r '.dashboard.panels['"${i}"']' dashboard.json >"${i}.json"
+    jq -r '.dashboard.panels['"${i}"']' temp.json >"${i}.json"
 
-    #
-    if jq -e '.targets != null and .targets != []' "${i}.json" >/dev/null; then
-      jq -r '. |
-      "\(.title);\(.type);\(.targets[].datasource.uid);\(.targets[].expr)"' \
-        "${i}.json" >>"${folder}/${dashboard_title}.csv"
+    # Ignora painéis do tipo "row"
+    if jq -e '.type == "row"' "${i}.json" >/dev/null; then
       rm -f "${i}.json"
-    #
-    else
-      jq -r '. | 
-      "\(.title);\(.type);N/A;N/A"' \
-        "${i}.json" >>"${folder}/${dashboard_title}.csv"
-      rm -f "${i}.json"
+      continue
     fi
+
+    # Se tiver targets, lista normalmente, mas trata array e objeto
+    if jq -e '.targets != null and .targets != []' "${i}.json" >/dev/null; then
+
+      # Verifica se targets é array
+      if jq -e '(.targets | type) == "array"' "${i}.json" >/dev/null; then
+        jq -r \
+          --arg folder_title "${folder_title}" \
+          --arg dashboard_title "${dashboard_title}" \
+          --arg dashboard_url "${dashboard_url}" \
+          --arg grafana_url "${grafana_url}" \
+          '
+            . as $panel |
+            ($folder_title) + ";" +
+            ($dashboard_title) + ";" +
+            ($panel.title // "-") + ";" +
+            ($grafana_url + $dashboard_url + "?&viewPanel=" + ($panel.id|tostring)) + ";" +
+            (if ($panel.datasource | type) == "object"
+                then ($panel.datasource.type // "-")
+                else ($panel.datasource // "-")
+            end) + ";" +
+            (if ($panel.targets and ($panel.targets | length) > 0 and
+                $panel.targets[0].datasource and
+                ($panel.targets[0].datasource | type) == "object")
+                then ($panel.targets[0].datasource.uid // "-")
+                else "-"
+            end) + ";" +
+            ($panel.type // "-")
+            ' "${i}.json" >>"${folder_destination}/panels.csv"
+      else
+
+        # targets é objeto, não array
+        #
+        jq -r \
+          --arg folder_title "${folder_title}" \
+          --arg dashboard_title "${dashboard_title}" \
+          --arg dashboard_url "${dashboard_url}" \
+          --arg grafana_url "${grafana_url}" \
+          '
+            . as $panel |
+            ($folder_title) + ";" +
+            ($dashboard_title) + ";" +
+            ($panel.title // "-") + ";" +
+            ($grafana_url + $dashboard_url + "?&viewPanel=" + ($panel.id|tostring)) + ";" +
+            (if ($panel.datasource | type) == "object" then ($panel.datasource.type // "-") else ($panel.datasource // "-") end) + ";" +
+            ($panel.type // "-") + ";N/A"
+            ' "${i}.json" >>"${folder_destination}/panels.csv"
+      fi
+    else
+      # Não tem targets
+      #
+      jq -r \
+        --arg folder_title "${folder_title}" \
+        --arg dashboard_title "${dashboard_title}" \
+        --arg dashboard_url "${dashboard_url}" \
+        --arg grafana_url "${grafana_url}" \
+        '
+          . as $panel |
+          ($folder_title) + ";" +
+          ($dashboard_title) + ";" +
+          ($grafana_url + $dashboard_url + "?viewPanel=" + ($panel.id|tostring)) + ";" +
+          ($panel.title // "-") + ";" +
+          (if ($panel.datasource | type) == "object" then ($panel.datasource.type // "-") else ($panel.datasource // "-") end) + ";" +
+          ($panel.type // "-") + ";N/A"
+          ' "${i}.json" >>"${folder_destination}/panels.csv"
+    fi
+
+    # Remove o arquivo temporário do painel
+    rm -f "${i}.json"
+
   done
-  sort -u "${folder}/${dashboard_title}.csv" -o "${folder}/${dashboard_title}.csv"
-  sed -i "1s/^/Panel;Type;Datasource;Query\n/" "${folder}/${dashboard_title}.csv"
-done <dashboardsUID.txt
-rm -f dashboard.json dashboardsUID.txt
+
+  # Remove linhas duplicadas, se houver
+  sort -u -o "${folder_destination}/panels.csv" "${folder_destination}/panels.csv"
+
+  # Adiciona o cabeçalho no arquivo gerado
+  sed -i "1s/^/dashboardFolder;dashboardName;panelTitle;url;datasourceType;datasourceUid;panelType\n/" "${folder_destination}/panels.csv"
+
+  # Remove o arquivo temporário do dashboard
+  rm -f temp.json
+
+done <dashboards_uid.txt
+
+# Remove arquivos temporários
+rm -rf dashboards{.json,_uid.txt}

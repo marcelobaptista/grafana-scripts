@@ -11,40 +11,35 @@
 # Habilita o modo de saída de erro
 set -euo pipefail
 
-token="" # Token de acesso ao Grafana
-grafana_url="" # URL do Grafana
+grafana_token=""       # Token de acesso ao Grafana
+grafana_url=""         # URL do Grafana
 
 # Nome do arquivo contendo os nomes dos folders
 input_file="$1"
 
 # Verifica se o arquivo foi passado como argumento
 if [ $# -ne 1 ]; then
-  echo "Uso do script: $0 arquivo.txt"
-  exit 1
+    echo "Uso do script: $0 arquivo.txt"
+    exit 1
 fi
 
 # Verifica se o arquivo existe
 if [ ! -f "${input_file}" ]; then
-  echo "Arquivo não encontrado: ${input_file}"
-  exit 1
+    echo "Arquivo não encontrado: ${input_file}"
+    exit 1
 fi
 
-# Menu de opções
+# Limpa a tela
 clear
 
 # Verifica se a URL e o token são válidos
 check_api=$(curl -sk "${grafana_url}/api/org" \
     -H "Accept: application/json" \
     -H "Content-Type: application/json" \
-    -H "Authorization: Bearer ${token}")
+    -H "Authorization: Bearer ${grafana_token}" | jq .name)
 
-if [[ -z "${check_api}" ]]; then
-    echo "Verifique a URL fornecida"
-    exit 1
-fi
-
-if [[ "${check_api}" == *"Invalid API key"* ]]; then
-    echo "Token inválido"
+if [[ "${check_api}" == null ]]; then
+    echo "Verifique a URL e o token de acesso"
     exit 1
 fi
 
@@ -55,7 +50,7 @@ while IFS= read -r folder_name || [[ -n "${folder_name}" ]]; do
     response=$(curl -sk -X POST "${grafana_url}/api/folders" \
         -H "Accept: application/json" \
         -H "Content-Type: application/json" \
-        -H "Authorization: Bearer ${token}" \
+        -H "Authorization: Bearer ${grafana_token}" \
         -d "{\"title\": \"${folder_name}\"}")
 
     # Verifica se o folder foi criado com sucesso
@@ -82,4 +77,4 @@ while IFS= read -r folder_name || [[ -n "${folder_name}" ]]; do
             ;;
         esac
     fi
-done < "${input_file}" # Lê o arquivo de entrada
+done <"${input_file}" # Lê o arquivo de entrada

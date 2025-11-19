@@ -3,83 +3,144 @@
 # Habilita o modo de saída de erro
 set -euo pipefail
 
-token="" # Token de acesso ao Grafana
-grafana_url="" # URL do Grafana
+# Verifica se a url e o token foram passados como argumentos
+if [ $# -lt 2 ]; then
+  printf "\nUso do script: %s <grafana_url> <grafana_token>\n" "$0"
+  exit 1
+fi
 
-# Endpoints para as requisições
-endpoint_dashboards="${grafana_url}/api/dashboards"
-endpoint_search="${grafana_url}/api/search?type=dash-db&limit=5000"
+# Argumentos passados para o script
+grafana_url=$1
+grafana_token=$2
 
-# Consulta a API do Grafana para obter a lista de dashboards e salva os UIDs em um arquivo
-curl -sk "${endpoint_search}" \
+# Define a data atual
+date_now=$(date +%Y-%m-%d)
+
+# Endpoints para requisições
+grafana_api_dashboards="${grafana_url}/api/dashboards"
+grafana_api_search="${grafana_url}/api/search?type=dash-db&limit=5000"
+
+# Pastas de destino de backup dos dashboards atualizados e originais
+folder_destination_original="${date_now}-original-dashboards"
+folder_destination_updated="${date_now}-updated-dashboards"
+
+# Arquivo de log
+logfile="${date_now}-dashboards-backup.log"
+
+# # Função de logging para backups
+logging_backup()
+{
+  local dashboard_title=$1
+  local dashboard_uid=$2
+  local file=$3
+  local message
+  message="[$(date --iso-8601=seconds)] dashboard: ${dashboard_title}, uid: ${dashboard_uid}, file: ${file}"
+  echo "${message}" | tee -a "${logfile}"
+}
+
+#  Função de logging para dashboards atualizados (de graph para timeseries)
+logging_updated()
+{
+  local dashboard_title=$1
+  local dashboard_uid=$2
+  local message
+  message="[$(date --iso-8601=seconds)] dashboard_updated: ${dashboard_title}, uid: ${dashboard_uid}"
+  echo "${message}" | tee -a "${logfile}"
+}
+
+# Consulta API do Grafana e extrai todos dashboards configuradas, com tratamento de erro de conexão
+if ! curl -sk "${grafana_api_search}" \
   -H "Accept: application/json" \
-  -H "Authorization: Bearer ${token}" \
-  -H "Content-Type: application/json" |
-  jq -r '.[] | .uid' >dashboards_uid.txt
+  -H "Authorization: Bearer ${grafana_token}" \
+  -H "Content-Type: application/json" \
+  -o "dashboards.json"; then
+  printf "\nErro: falha na conexão com a URL ou problema de resolução DNS.\n"
+  exit 1
+fi
 
-# Cria diretórios necessários
-mkdir -p {updated,original}-dashboards
+# Verifica se o token é inválido ou sem permissão suficiente
+if grep -iq "invalid API key" "dashboards.json"; then
+  printf "\nErro: chave de API inválida.\n"
+  rm -f "dashboards.json"
+  exit 1
+elif grep -iq "Access denied" "dashboards.json" || grep -iq "Permissions needed" "dashboards.json"; then
+  printf "\nErro: token sem permissão suficiente.\n"
+  rm -f "dashboards.json"
+  exit 1
+fi
 
-# Loop sobre os UIDs dos dashboards
+# Cria lista de UIDs dos dashboards
+jq -r '.[].uid' dashboards.json >dashboards_uid.txt
+
+# Cria diretórios para salvar os arquivos de backup
+mkdir -p "${folder_destination_original}"
+mkdir -p "${folder_destination_updated}"
+
+# Itera sobre cada dashboard UID
 while IFS= read -r uid; do
-  # Consulta a API para obter informações sobre o dashboard e salva em um arquivo JSON
-  curl -sk "${endpoint_dashboards}/uid/${uid}" \
+
+  # Salva o dashboard original em um arquivo temporário
+  curl -sk "${grafana_api_dashboards}/uid/${uid}" \
     -H "Accept: application/json" \
-    -H "Authorization: Bearer ${token}" \
-    -H "Content-Type: application/json" |
-    jq -r >tmp.json
+    -H "Authorization: Bearer ${grafana_token}" \
+    -H "Content-Type: application/json" \
+    | jq -r >tmp.json
 
   # Verifica se existe painel do tipo "timeseries" no dashboard
-  graph=$(grep -c '"type": "graph"' tmp.json)
+  verify_graph_panel=$(grep -c '"type": "graph"' tmp.json)
 
   # Se não existir, remove o arquivo temporário e continua o loop
-  if [ "${graph}" -eq 0 ]; then rm -f tmp.json && continue; fi
-  
-  # Variáveis para nomear diretórios e arquivos
-  folder_title=$(jq -r '.meta.folderTitle' tmp.json)
-  dashboard_slug=$(jq -r '.meta.slug' tmp.json)
+  if [ "${verify_graph_panel}" -eq 0 ]; then rm -f tmp.json && continue; fi
 
-  # Cria diretório para os arquivos de backup dos dashboards, renomeando-os
-  mkdir -p "original-dashboards/${folder_title}"
+  # Extrai informações necessárias para nomear o arquivo de backup
+  folder_title=$(jq -r '.meta.folderTitle' tmp.json)
+  dashboard_title=$(jq -r '.dashboard.title' tmp.json)
+  dashboard_title_sanitized=$(jq -r '.meta.url' tmp.json | awk -F'/' '{print $NF}')
+
+  # Cria diretório para backup do dashboard
+  mkdir -p "${folder_destination_original}/${folder_title}"
 
   # Salva o dashboard original com estrutura JSON modificada
-  # que possibilita a importação pela interface do Grafana
-  jq -r '{meta:.meta}+.dashboard' tmp.json >"original-dashboards/${folder_title}/${dashboard_slug}.json"
+  # que possibilita a importação pela interface web do Grafana
+  jq -r '
+  {meta:.meta}+.dashboard
+  ' tmp.json >"${folder_destination_original}/${folder_title}/${dashboard_title_sanitized}-${uid}.json"
 
-  # Cria diretório para os arquivos com os dashboards modificados
-  mkdir -p "updated-dashboards/${folder_title}"
-  dashboard_updated="updated-dashboards/${folder_title}/${dashboard_slug}.json"
+  # Registra no log
+  logging_backup "${dashboard_title}" "${uid}" "${folder_destination_original}/${folder_title}/${dashboard_title_sanitized}-${uid}.json"
 
-  # Modifica a estrutura JSON original e salva no respectivo diretório.
-  # Esse procedimento é necessário pois caso contrário não é possível
-  # atualizar o dashboard através de API
+  # Cria diretório para salvar o dashboard na estrutura da API do Grafana
+  mkdir -p "${folder_destination_updated}/${folder_title}"
+
+  # Salva o dashboard original com estrutura JSON modificada
+  # que possibilita a importação pela API do Grafana
   jq -r '
     . |= (.folderUid=.meta.folderUid) 
     |del(.meta) 
     |del(.dashboard.id) + {overwrite: true}
-    ' tmp.json >"${dashboard_updated}"
+    ' tmp.json >"${folder_destination_updated}/${folder_title}/${dashboard_title_sanitized}-${uid}.json"
 
-  # Variável para o nome do dashboard
-  dashboard_name=$(jq -r '.dashboard.title' tmp.json)
+  # Remove o arquivo temporário
+  rm -f tmp.json
+
+done <"dashboards_uid.txt"
+
+for dashboard_updated in "${folder_destination_updated}"/*/*.json; do
 
   # Altera os painéis do tipo "graph" para "timeseries"
   sed -i 's/"type": "graph"/"type": "timeseries"/' "${dashboard_updated}"
 
   # Atualiza o dashboard usando a API do Grafana
-  curl -sk -X POST "${endpoint_dashboards}/db" \
+  curl -sk -X POST "${grafana_api_dashboards}/db" \
     -H "Accept: application/json" \
-    -H "Authorization: Bearer ${token}" \
+    -H "Authorization: Bearer ${grafana_token}" \
     -H "Content-Type: application/json" \
     -d @"${dashboard_updated}"
 
-  rm -f tmp.json
+  # Registra no log
+  logging_update "${dashboard_title}" "${dashboard_uid}"
 
-  # Gera um CSV apenas para relatório
-  echo "${folder_title};${dashboard_name};${grafana_url}/d/${uid}" >>Dashboards.csv
-done <"dashboards_uid.txt"
+done
 
-# Adiciona cabeçalho ao arquivo CSV
-sed -i "1s/^/Folder;Dashboard;URL\n/" Dashboards.csv
-
-# Clean up
-rm -rf dashboards_uid.txt
+# Remove arquivos temporários
+rm -f dashboards{.json,_uid.txt}
