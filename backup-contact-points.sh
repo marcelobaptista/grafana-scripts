@@ -26,13 +26,12 @@ folder_destination="${date_now}-contact-points-backup"
 logfile="${date_now}-contact-points-backup.log"
 
 # Função de logging — grava mensagem com timestamp no arquivo de log
-logging()
-{
+logging() {
   local contact_point_name=$1
   local contact_point_uid=$2
   local file=$3
   local message
-  message="[$(date --iso-8601=seconds)] contact_point: ${contact_point_name}, uid: ${contact_point_uid}, file: ${PWD}/${file}"
+  message="[$(date --iso-8601=seconds)] contact-point: ${contact_point_name}, uid: ${contact_point_uid}, file: ${file}"
   echo "${message}" | tee -a "${logfile}"
 }
 
@@ -41,48 +40,45 @@ if ! curl -sk "${grafana_api_contact_points}" \
   -H "Accept: application/json" \
   -H "Authorization: Bearer ${grafana_token}" \
   -H "Content-Type: application/json" \
-  -o "contact_points.json"; then
+  -o "contact-points.json"; then
   printf "\nErro: falha na conexão com a URL ou problema de resolução DNS.\n"
   exit 1
 fi
 
 # Verifica se o token é inválido ou sem permissão suficiente
-if grep -iq "invalid API key" "contact_points.json"; then
+if grep -iq "invalid API key" "contact-points.json"; then
   printf "\nErro: chave de API inválida.\n"
-  rm -f "contact_points.json"
+  rm -f "contact-points.json"
   exit 1
-elif grep -iq "Access denied" "contact_points.json" || grep -iq "Permissions needed" "contact_points.json"; then
+elif grep -iq "Access denied" "contact-points.json" || grep -iq "Permissions needed" "contact-points.json"; then
   printf "\nErro: token sem permissão suficiente.\n"
-  rm -f "contact_points.json"
+  rm -f "contact-points.json"
   exit 1
 fi
 
 # Cria lista de UIDs dos contact points
-jq -r '.[].uid' contact_points.json | sort -u >contact_points_uid.txt
+jq -r '.[].uid' contact-points.json | sort -u >contact_points_uid.txt
 
 # Cria diretório para salvar os arquivos de backup
 mkdir -p "${folder_destination}"
 
-# Itera sobre cada contact point e faz backup
+# Itera sobre cada contact point e faz backup dos contact points
 while IFS= read -r uid; do
 
-  # Formata o título do contact point para ser usado como nome de arquivo
-  contact_point_name=$(jq -r --arg uid "${uid}" '.[] | select(.uid == $uid) | .name' contact_points.json \
-    | tr '[:upper:]' '[:lower:]' \
-    | tr ' /' '-' \
-    | iconv -c -f utf8 -t ascii//TRANSLIT \
-    | sed 's/[^a-z0-9-]//g' \
-    | sed 's/-\{2,\}/-/g' \
-    | sed 's/^-\|-$//g' || true)
+  # Extrai o nome do contact point
+  contact_point_name=$(jq -r --arg uid "${uid}" '.[] | select(.uid == $uid) | .name' contact-points.json)
 
-  # Faz backup do contact point
+  # Formata o título do contact point para ser usado como nome de arquivo
+  contact_point_name_sanitized=$(python3 -c "import sys, unicodedata, re; s=sys.argv[1].lower(); s=unicodedata.normalize('NFKD', s).encode('ascii','ignore').decode('ascii'); s=re.sub(r'[^a-z0-9]+', '-', s); s=re.sub(r'-+', '-', s); print(s.strip('-'))" "${contact_point_name}")
+
+  # Salva o contact point em um arquivo JSON
   jq -r --arg uid "${uid}" '
     .[] | 
     select(.uid == $uid)
-    ' contact_points.json >"${folder_destination}/${contact_point_name}-${uid}.json"
+    ' contact-points.json >"${folder_destination}/${contact_point_name_sanitized}-${uid}.json"
 
   # Registra no log
-  logging "${contact_point_name}" "${uid}" "${folder_destination}/${contact_point_name}-${uid}.json"
+  logging "${contact_point_name}" "${uid}" "${folder_destination}/${contact_point_name_sanitized}-${uid}.json"
 
 done <contact_points_uid.txt
 

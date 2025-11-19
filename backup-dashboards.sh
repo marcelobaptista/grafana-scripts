@@ -28,13 +28,12 @@ folder_destination_webui="${date_now}-dashboards-backup/webui"
 logfile="${date_now}-dashboards-backup.log"
 
 # Função de logging — grava mensagem com timestamp no arquivo de log
-logging()
-{
+logging() {
   local dashboard_title=$1
   local dashboard_uid=$2
   local file=$3
   local message
-  message="[$(date --iso-8601=seconds)] dashboard: ${dashboard_title}, uid: ${dashboard_uid}, file: ${PWD}/${file}"
+  message="[$(date --iso-8601=seconds)] dashboard: ${dashboard_title}, uid: ${dashboard_uid}, file: ${file}"
   echo "${message}" | tee -a "${logfile}"
 }
 
@@ -60,26 +59,30 @@ elif grep -iq "Access denied" "dashboards.json" || grep -iq "Permissions needed"
 fi
 
 # Cria lista de UIDs dos dashboards
-jq -r '.[].uid' dashboards.json >dashboards_uid.txt
+jq -r '.[].uid' dashboards.json >dashboards-uid.txt
 
 # Cria diretórios para salvar os arquivos de backup
 mkdir -p "${folder_destination_api}"
 mkdir -p "${folder_destination_webui}"
 
-# Itera sobre cada dashboard UID e faz backup
+# Itera sobre cada dashboard UID e faz backup dos dashboards
 while IFS= read -r uid; do
 
   # Salva o dashboard original em um arquivo temporário
   curl -sk "${grafana_api_dashboard_uid}/${uid}" \
     -H "Accept: application/json" \
     -H "Authorization: Bearer ${grafana_token}" \
-    -H "Content-Type: application/json" \
-    | jq -r >tmp.json
+    -H "Content-Type: application/json" |
+    jq -r >dashboard.json
 
-  # Extrai informações necessárias para nomear o arquivo de backup
-  folder_title=$(jq -r '.meta.folderTitle' tmp.json)
-  dashboard_title=$(jq -r '.dashboard.title' tmp.json)
-  dashboard_title_sanitized=$(jq -r '.meta.url' tmp.json | awk -F'/' '{print $NF}')
+  # Extrai o nome da pasta do dashboard
+  folder_title=$(jq -r '.meta.folderTitle' dashboard.json)
+
+  # Extrai o título do dashboard
+  dashboard_title=$(jq -r '.dashboard.title' dashboard.json)
+
+  # Formata o título do dashboard para ser usado como nome de arquivo
+  dashboard_title_sanitized=$(jq -r '.meta.url' dashboard.json | awk -F'/' '{print $NF}')
 
   # Cria diretório para salvar o dashboard na estrutura da interface web do Grafana
   mkdir -p "${folder_destination_webui}/${folder_title}"
@@ -88,7 +91,7 @@ while IFS= read -r uid; do
   # que possibilita a importação pela interface web do Grafana
   jq -r '
   {meta:.meta}+.dashboard
-  ' tmp.json >"${folder_destination_webui}/${folder_title}/${dashboard_title_sanitized}-${uid}.json"
+  ' dashboard.json >"${folder_destination_webui}/${folder_title}/${dashboard_title_sanitized}-${uid}.json"
 
   # Registra no log
   logging "${dashboard_title}" "${uid}" "${folder_destination_webui}/${folder_title}/${dashboard_title_sanitized}-${uid}.json"
@@ -102,15 +105,15 @@ while IFS= read -r uid; do
     . |= (.folderUid=.meta.folderUid) 
     |del(.meta) 
     |del(.dashboard.id) + {overwrite: true}
-    ' tmp.json >"${folder_destination_api}/${folder_title}/${dashboard_title_sanitized}-${uid}.json"
+    ' dashboard.json >"${folder_destination_api}/${folder_title}/${dashboard_title_sanitized}-${uid}.json"
 
   # Registra no log
   logging "${dashboard_title}" "${uid}" "${folder_destination_api}/${folder_title}/${dashboard_title_sanitized}-${uid}.json"
 
   # Remove o arquivo temporário
-  rm -f tmp.json
+  rm -f dashboard.json
 
-done <dashboards_uid.txt
+done <dashboards-uid.txt
 
 # Remove arquivos temporários
-rm -f dashboards{.json,_uid.txt}
+rm -f dashboards{.json,-uid.txt}

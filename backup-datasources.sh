@@ -26,13 +26,12 @@ folder_destination="${date_now}-datasources-backup"
 logfile="${date_now}-datasources-backup.log"
 
 # Função de logging — grava mensagem com timestamp no arquivo de log
-logging()
-{
+logging() {
   local datasource_name=$1
   local datasource_uid=$2
   local file=$3
   local message
-  message="[$(date --iso-8601=seconds)] datasource: ${datasource_name}, uid: ${datasource_uid}, file: ${PWD}/${file}"
+  message="[$(date --iso-8601=seconds)] datasource: ${datasource_name}, uid: ${datasource_uid}, file: ${file}"
   echo "${message}" | tee -a "${logfile}"
 }
 
@@ -63,25 +62,28 @@ jq -r '.[].uid' datasources.json >datasources_uid.txt
 # Cria diretório para salvar os arquivos de backup
 mkdir -p "${folder_destination}"
 
-# Itera sobre cada datasource UID e faz backup
+# Itera sobre cada datasource UID e faz backup dos datasources
 while IFS= read -r datasource_uid; do
 
-  # Extrai o nome do datasource para nomear o arquivo de backup
+  # Extrai o nome do datasource 
   datasource_name=$(
     jq -r --arg datasource_uid "${datasource_uid}" '
     .[] | select(.uid == "'"${datasource_uid}"'") |.name
   ' datasources.json
   )
 
-  # Faz backup do datasource deletando o campo id
+  # Formata o título do datasource para ser usado como nome de arquivo
+  datasource_name_sanitized=$(python3 -c "import sys, unicodedata, re; s=sys.argv[1].lower(); s=unicodedata.normalize('NFKD', s).encode('ascii','ignore').decode('ascii'); s=re.sub(r'[^a-z0-9]+', '-', s); s=re.sub(r'-+', '-', s); print(s.strip('-'))" "${datasource_name}")
+
+  # Salva o datasource, removendo o campo id, em um arquivo JSON
   jq -r --arg datasource_uid "${datasource_uid}" \
     '.[] | 
     select(.uid == "'"${datasource_uid}"'") | 
     del(.id)
-    ' datasources.json >"${folder_destination}/${datasource_name}-${datasource_uid}.json"
+    ' datasources.json >"${folder_destination}/${datasource_name_sanitized}-${datasource_uid}.json"
 
   # Registra no log
-  logging "${datasource_name}" "${datasource_uid}" "${folder_destination}/${datasource_name}-${datasource_uid}.json"
+  logging "${datasource_name}" "${datasource_uid}" "${folder_destination}/${datasource_name_sanitized}-${datasource_uid}.json"
 
 done <datasources_uid.txt
 

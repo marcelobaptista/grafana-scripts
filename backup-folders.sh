@@ -27,11 +27,11 @@ logfile="${date_now}-folders-backup.log"
 
 # Função de logging — grava mensagem com timestamp no arquivo de log
 logging() {
-  local fd_title=$1
-  local fd_uid=$2
+  local folder_title=$1
+  local folder_uid=$2
   local file=$3
   local message
-  message="[$(date --iso-8601=seconds)] folder: ${fd_title}, uid: ${fd_uid}, file: ${PWD}/${file}"
+  message="[$(date --iso-8601=seconds)] folder: ${folder_title}, uid: ${folder_uid}, file: ${file}"
   echo "${message}" | tee -a "${logfile}"
 }
 
@@ -57,7 +57,7 @@ elif grep -iq "Access denied" "folders.json" || grep -iq "Permissions needed" "f
 fi
 
 # Cria lista de UIDs das pastas do Grafana
-jq -r '.[].uid' folders.json >folders_uid.txt
+jq -r '.[].uid' folders.json >folders-uid.txt
 
 # Cria diretório para salvar os arquivos de backup
 mkdir -p "${folder_destination}"
@@ -65,23 +65,26 @@ mkdir -p "${folder_destination}"
 # Itera sobre cada folder UID e faz backup
 while IFS= read -r folder_uid; do
 
-  # Faz backup da pasta deletando o campo id
+  # Salva a pasta, removendo o campo id, em um arquivo JSON
   curl -sk "${grafana_api_folders}/${folder_uid}" \
     -H "Accept: application/json" \
     -H "Authorization: Bearer ${grafana_token}" \
-    -H "Content-Type: application/json" \
-    | jq -r 'del(.id)' >"${folder_uid}.json"
+    -H "Content-Type: application/json" |
+    jq -r 'del(.id)' >folder.json
 
-  # Extrai o nome da pasta para nomear o arquivo de backup
-  folder_title=$(jq -r '.url' -- "${folder_uid}.json" | awk -F'/' '{print $NF}')
+  # Extrai o nome da pasta
+  folder_title=$(jq -r '.title' folder.json)
+
+  # Formata o nome da pasta para ser usado como nome de arquivo
+  folder_title_sanitized=$(jq -r '.url' folder.json | awk -F'/' '{print $NF}')
 
   # Renomeia o arquivo e move para o diretório de backup
-  mv -- "${folder_uid}.json" "${folder_destination}/${folder_title}-${folder_uid}.json"
+  mv folder.json "${folder_destination}/${folder_title_sanitized}-${folder_uid}.json"
 
   # Registra no log
-  logging "${folder_title}" "${folder_uid}" "${folder_destination}/${folder_title}-${folder_uid}.json"
+  logging "${folder_title}" "${folder_uid}" "${folder_destination}/${folder_title_sanitized}-${folder_uid}.json"
 
-done <folders_uid.txt
+done <folders-uid.txt
 
 # Remove arquivos temporários
-rm -f folders{.json,_uid.txt}
+rm -f folders{.json,-uid.txt}
