@@ -35,12 +35,12 @@ logging() {
   echo "${message}" | tee -a "${logfile}"
 }
 
-# Consulta a API do Grafana e salva a resposta em JSON (com tratamento de erro de conexão)
+# Consulta API do Grafana e salva a resposta em JSON (com tratamento de erro de conexão)
 if ! curl -sk "${grafana_api_contact_points}" \
   -H "Accept: application/json" \
   -H "Authorization: Bearer ${grafana_token}" \
   -H "Content-Type: application/json" \
-  -o "contact-points.json"; then
+  > "contact-points.json"; then
   printf "\nErro: falha na conexão com a URL ou problema de resolução DNS.\n"
   exit 1
 fi
@@ -57,12 +57,12 @@ elif grep -iq "Access denied" "contact-points.json" || grep -iq "Permissions nee
 fi
 
 # Cria lista de UIDs dos contact points
-jq -r '.[].uid' contact-points.json | sort -u >contact_points_uid.txt
+jq -r '.[].uid' contact-points.json | sort -u >contact-points-uid.txt
 
 # Cria diretório para salvar os arquivos de backup
 mkdir -p "${folder_destination}"
 
-# Itera sobre cada contact point e faz backup dos contact points
+# Itera sobre cada contact point UID e faz backup dos contact points
 while IFS= read -r uid; do
 
   # Extrai o nome do contact point
@@ -80,7 +80,7 @@ while IFS= read -r uid; do
   # Registra no log
   logging "${contact_point_name}" "${uid}" "${folder_destination}/${contact_point_name_sanitized}-${uid}.json"
 
-done <contact_points_uid.txt
+done <contact-points-uid.txt
 
 # Remove arquivos temporários
-rm -f contact_points{.json,_uid.txt}
+rm -f contact-points{.json,-uid.txt}

@@ -35,12 +35,12 @@ logging() {
   echo "${message}" | tee -a "${logfile}"
 }
 
-# Consulta a API do Grafana e salva a resposta em JSON (com tratamento de erro de conexão)
+# Consulta API do Grafana e salva a resposta em JSON (com tratamento de erro de conexão)
 if ! curl -sk "${grafana_api_datasources}" \
   -H "Accept: application/json" \
   -H "Authorization: Bearer ${grafana_token}" \
   -H "Content-Type: application/json" \
-  -o "datasources.json"; then
+  > "datasources.json"; then
   printf "\nErro: falha na conexão com a URL ou problema de resolução DNS.\n"
   exit 1
 fi

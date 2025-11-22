@@ -3,7 +3,7 @@
 # Habilita o modo de saída de erro
 set -euo pipefail
 
-# Verifica se a url e o token foram passados como argumentos
+# Verifica se a URL e o token foram passados como argumentos
 if [ $# -lt 3 ]; then
   printf "\nUso do script: %s <grafana_url> <grafana_token> <period[d|m]>\n" "$0"
   exit 1
@@ -52,7 +52,7 @@ else
   exit 1
 fi
 
-# Consulta API do Grafana e lista todos os usuários da organization, com tratamento de erro de conexão
+# Consulta API do Grafana e salva a resposta em JSON (com tratamento de erro de conexão)
 if ! curl -sk "${grafana_api_users}" \
   -H "Accept: application/json" \
   -H "Authorization: Bearer ${grafana_token}" \

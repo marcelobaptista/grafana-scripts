@@ -21,8 +21,8 @@ grafana_api_dashboard_uid="${grafana_url}/api/dashboards/uid"
 grafana_api_search="${grafana_url}/api/search?type=dash-db&limit=5000"
 
 # Pastas de destino para os arquivos de backup
-folder_destination_api="${date_now}-dashboards-backup/api"
-folder_destination_webui="${date_now}-dashboards-backup/webui"
+folder_destination_api="${date_now}-dashboards-backup/import-api"
+folder_destination_webui="${date_now}-dashboards-backup/import-webui"
 
 # Arquivo de log
 logfile="${date_now}-dashboards-backup.log"
@@ -37,12 +37,12 @@ logging() {
   echo "${message}" | tee -a "${logfile}"
 }
 
-# Consulta a API do Grafana e salva a resposta em JSON (com tratamento de erro de conexão)
+# Consulta API do Grafana e salva a resposta em JSON (com tratamento de erro de conexão)
 if ! curl -sk "${grafana_api_search}" \
   -H "Accept: application/json" \
   -H "Authorization: Bearer ${grafana_token}" \
   -H "Content-Type: application/json" \
-  -o "dashboards.json"; then
+  > "dashboards.json"; then
   printf "\nErro: falha na conexão com a URL ou problema de resolução DNS.\n"
   exit 1
 fi
@@ -59,7 +59,7 @@ elif grep -iq "Access denied" "dashboards.json" || grep -iq "Permissions needed"
 fi
 
 # Cria lista de UIDs dos dashboards
-jq -r '.[].uid' dashboards.json >dashboards-uid.txt
+jq -r '.[].uid' dashboards.json >dashboards-uids.txt
 
 # Cria diretórios para salvar os arquivos de backup
 mkdir -p "${folder_destination_api}"
@@ -73,16 +73,16 @@ while IFS= read -r uid; do
     -H "Accept: application/json" \
     -H "Authorization: Bearer ${grafana_token}" \
     -H "Content-Type: application/json" |
-    jq -r >dashboard.json
+    jq -r >"dashboard-${uid}.json"
 
   # Extrai o nome da pasta do dashboard
-  folder_title=$(jq -r '.meta.folderTitle' dashboard.json)
+  folder_title=$(jq -r '.meta.folderTitle' "dashboard-${uid}.json")
 
   # Extrai o título do dashboard
-  dashboard_title=$(jq -r '.dashboard.title' dashboard.json)
+  dashboard_title=$(jq -r '.dashboard.title' "dashboard-${uid}.json")
 
   # Formata o título do dashboard para ser usado como nome de arquivo
-  dashboard_title_sanitized=$(jq -r '.meta.url' dashboard.json | awk -F'/' '{print $NF}')
+  dashboard_title_sanitized=$(jq -r '.meta.url' "dashboard-${uid}.json" | awk -F'/' '{print $NF}')
 
   # Cria diretório para salvar o dashboard na estrutura da interface web do Grafana
   mkdir -p "${folder_destination_webui}/${folder_title}"
@@ -91,7 +91,7 @@ while IFS= read -r uid; do
   # que possibilita a importação pela interface web do Grafana
   jq -r '
   {meta:.meta}+.dashboard
-  ' dashboard.json >"${folder_destination_webui}/${folder_title}/${dashboard_title_sanitized}-${uid}.json"
+  ' "dashboard-${uid}.json" >"${folder_destination_webui}/${folder_title}/${dashboard_title_sanitized}-${uid}.json"
 
   # Registra no log
   logging "${dashboard_title}" "${uid}" "${folder_destination_webui}/${folder_title}/${dashboard_title_sanitized}-${uid}.json"
@@ -105,15 +105,15 @@ while IFS= read -r uid; do
     . |= (.folderUid=.meta.folderUid) 
     |del(.meta) 
     |del(.dashboard.id) + {overwrite: true}
-    ' dashboard.json >"${folder_destination_api}/${folder_title}/${dashboard_title_sanitized}-${uid}.json"
+    ' "dashboard-${uid}.json" >"${folder_destination_api}/${folder_title}/${dashboard_title_sanitized}-${uid}.json"
 
   # Registra no log
   logging "${dashboard_title}" "${uid}" "${folder_destination_api}/${folder_title}/${dashboard_title_sanitized}-${uid}.json"
 
-  # Remove o arquivo temporário
-  rm -f dashboard.json
+  # Remove arquivo temporário
+  rm -f "dashboard-${uid}.json"
 
-done <dashboards-uid.txt
+done <dashboards-uids.txt
 
 # Remove arquivos temporários
-rm -f dashboards{.json,-uid.txt}
+rm -f dashboards{.json,-uids.txt}

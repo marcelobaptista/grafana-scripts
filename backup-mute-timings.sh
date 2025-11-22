@@ -35,12 +35,12 @@ logging() {
   echo "${message}" | tee -a "${logfile}"
 }
 
-# Consulta a API do Grafana e salva a resposta em JSON (com tratamento de erro de conexão)
+# Consulta API do Grafana e salva a resposta em JSON (com tratamento de erro de conexão)
 if ! curl -sk "${grafana_api_mute_timings}" \
   -H "Accept: application/json" \
   -H "Authorization: Bearer ${grafana_token}" \
   -H "Content-Type: application/json" \
-  -o "mute-timings.json"; then
+  > "mute-timings.json"; then
   printf "\nErro: falha na conexão com a URL ou problema de resolução DNS.\n"
   exit 1
 fi
@@ -71,7 +71,7 @@ while IFS= read -r mute_timing_name; do
   # Formata o título do mute timing para ser usado como nome de arquivo
   mute_timing_name_sanitized=$(python3 -c "import sys, unicodedata, re; s=sys.argv[1].lower(); s=unicodedata.normalize('NFKD', s).encode('ascii','ignore').decode('ascii'); s=re.sub(r'[^a-z0-9]+', '-', s); s=re.sub(r'-+', '-', s); print(s.strip('-'))" "${mute_timing_name}")
 
-  #Salva o mute timing em um arquivo JSON
+  # Salva o mute timing em um arquivo JSON
   curl -sk "${grafana_api_mute_timings}/${name}" \
     -H "Accept: application/json" \
     -H "Authorization: Bearer ${grafana_token}" \

@@ -36,12 +36,12 @@ logging() {
   echo "${message}" | tee -a "${logfile}"
 }
 
-# Consulta a API do Grafana e salva a resposta em JSON (com tratamento de erro de conexão)
+# Consulta API do Grafana e salva a resposta em JSON (com tratamento de erro de conexão)
 if ! curl -sk "${grafana_api_alert_rules}" \
   -H "Accept: application/json" \
   -H "Authorization: Bearer ${grafana_token}" \
   -H "Content-Type: application/json" \
-  -o "alert-rules.json"; then
+  > "alert-rules.json"; then
   printf "\nErro: falha na conexão com a URL ou problema de resolução DNS.\n"
   rm -f "alert-rules.json"
   exit 1
@@ -68,45 +68,45 @@ jq -r '
 # Itera sobre cada folder UID e cria diretórios para salvar os arquivos de backup
 while read -r folder_uid; do
 
-  # Cria arquivo temporário para extrair o título da pasta
+  # Cria arquivo temporário para extrair o título do folder
   curl -sk "${grafana_api_folders}/${folder_uid}" \
     -H "Accept: application/json" \
     -H "Authorization: Bearer ${grafana_token}" \
-    -H "Content-Type: application/json" >alert-rule-folder.json
+    -H "Content-Type: application/json" >"alert-rule-folder-${folder_uid}.json"
 
-  # Extrai o título da pasta
-  folder_title=$(jq -r '.title' alert-rule-folder.json)
+  # Extrai o título do folder
+  folder_title=$(jq -r '.title' "alert-rule-folder-${folder_uid}.json")
 
-  # Cria diretório para salvar os arquivos de backup do folder
+  # Cria diretório para salvar os arquivos de backup
   mkdir -p "${folder_destination}/${folder_title}"
 
   # Salva o mapeamento folder_uid;folder_title em um arquivo CSV
   echo "${folder_uid};${folder_title}" >>alert-rules-folders.csv
 
-  # Remove o arquivo temporário
-  rm -f alert-rule-folder.json
+  # Remove arquivo temporário
+  rm -f "alert-rule-folder-${folder_uid}.json"
 
 done <alert-rules-folders-uids.txt
 
 # Itera sobre cada folder UID e faz backup dos alertas
 while IFS=';' read -r folder_uid folder_title; do
 
-  # Filtra os alertas por folderUID
+  # Filtra os alertas por folder_uid
   jq -r --arg folder_uid "${folder_uid}" '
     [.[] | 
-    select (.folderUID == $folder_uid)]' alert-rules.json >alert-rule-folder.json
+    select (.folderUID == $folder_uid)]' alert-rules.json >"alert-rule-folder-${folder_uid}.json"
 
-  # Obtém o número de alertas no arquivo JSON do folderUID
-  length=$(jq -r '. | length' alert-rule-folder.json)
+  # Obtém o número de alertas no arquivo JSON do folder_uid
+  length=$(jq -r '. | length' "alert-rule-folder-${folder_uid}.json")
 
-  # Itera sobre os alertas do folderUID
+  # Itera sobre os alertas do folder_uid
   for ((i = 0; i < length; i++)); do
 
     # Extrai o UID do alerta
-    alert_uid=$(jq -r --argjson i "${i}" '.[$i].uid' alert-rule-folder.json)
+    alert_uid=$(jq -r --argjson i "${i}" '.[$i].uid' "alert-rule-folder-${folder_uid}.json")
 
     # Extrai o título do alerta
-    alert_title=$(jq -r --argjson i "${i}" '.[$i].title' alert-rule-folder.json)
+    alert_title=$(jq -r --argjson i "${i}" '.[$i].title' "alert-rule-folder-${folder_uid}.json")
 
     # Formata o título do alerta para ser usado como nome de arquivo
     alert_title_sanitized=$(python3 -c "import sys, unicodedata, re; s=sys.argv[1].lower(); s=unicodedata.normalize('NFKD', s).encode('ascii','ignore').decode('ascii'); s=re.sub(r'[^a-z0-9]+', '-', s); s=re.sub(r'-+', '-', s); print(s.strip('-'))" "${alert_title}")
@@ -123,10 +123,10 @@ while IFS=';' read -r folder_uid folder_title; do
 
   done
 
-  # Remove o arquivo JSON temporário
-  rm -f alert-rule-folder.json
+  # Remove arquivo temporário
+  rm -f "alert-rule-folder-${folder_uid}.json"
 
 done <alert-rules-folders.csv
 
 # Remove arquivos temporários
-rm -f alert-rules-folders.csv alert-rules-folders-uids.txt
+rm -f alert-rules{.json,-folders.csv,-folders-uids.txt}

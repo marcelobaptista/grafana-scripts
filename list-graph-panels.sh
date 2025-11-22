@@ -3,7 +3,7 @@
 # Habilita o modo de saída de erro
 set -euo pipefail
 
-# Verifica se a url e o token foram passados como argumentos
+# Verifica se a URL e o token foram passados como argumentos
 if [ $# -lt 2 ]; then
   printf "\nUso do script: %s <grafana_url> <grafana_token>\n" "$0"
   exit 1
@@ -16,10 +16,10 @@ grafana_token=$2
 # Define a data atual
 date_now=$(date +%Y-%m-%d)
 
-# Arquivo de saída
+# Nome do arquivo de saída
 output_file="${date_now}-grafana-graph-panels.csv"
 
-# Consulta API do Grafana e extrai todos dashboards configurados, com tratamento de erro de conexão
+# Consulta API do Grafana e salva a resposta em JSON (com tratamento de erro de conexão)
 if ! curl -sk "${grafana_url}/api/search?type=dash-db&limit=5000" \
   -H "Accept: application/json" \
   -H "Authorization: Bearer ${grafana_token}" \
@@ -42,7 +42,7 @@ elif grep -iq "Access denied" "dashboards.json" || grep -iq "Permissions needed"
 fi
 
 # Cria lista de UIDs dos dashboards
-jq -r '.[].uid' dashboards.json >dashboards_uid.txt
+jq -r '.[].uid' dashboards.json >dashboards-uids.txt
 
 # Itera sobre cada UID e extrai informações
 while IFS= read -r uid; do
@@ -52,22 +52,22 @@ while IFS= read -r uid; do
     -H "Accept: application/json" \
     -H "Authorization: Bearer ${grafana_token}" \
     -H "Content-Type: application/json" \
-    | jq -r >temp.json
+    | jq -r >"dashboard-${uid}.json"
 
   # Extrai número de painéis no dashboard
-  panels_length=$(jq -r '.dashboard.panels | length' temp.json)
+  panels_length=$(jq -r '.dashboard.panels | length' "dashboard-${uid}.json")
 
   # Loop através de todos os painéis do dashboard
   for ((i = 0; i < panels_length; i++)); do
 
     # Verifica o tipo do painel
-    panel_type=$(jq -r --argjson i "${i}" '.dashboard.panels[$i].type' temp.json)
+    panel_type=$(jq -r --argjson i "${i}" '.dashboard.panels[$i].type' "dashboard-${uid}.json")
 
     # Verifica se o tipo do painel é "graph"
     if [ "${panel_type}" != "graph" ]; then continue; fi
 
     # Se o painel for do tipo "graph", coleta o ID do painel
-    panel_id=$(jq -r --argjson i "${i}" '.dashboard.panels[$i].id' temp.json)
+    panel_id=$(jq -r --argjson i "${i}" '.dashboard.panels[$i].id' "dashboard-${uid}.json")
 
     # Adiciona informações do painel ao arquivo CSV
     jq -r --arg grafana_url "${grafana_url}" \
@@ -76,26 +76,29 @@ while IFS= read -r uid; do
         (.meta.folderTitle | tostring) + ";" +
         (.dashboard.title | tostring) + ";" +
         ($grafana_url) + (.meta.url) + "?viewPanel=" +($panel_id | tostring))
-    ' temp.json >>"${output_file}"
+    ' "dashboard-${uid}.json" >>"${output_file}"
 
   done
 
-  # Remove o arquivo temporário
-  rm -f temp.json
+  # Remove arquivo temporário
+  rm -f "dashboard-${uid}.json"
 
-done <dashboards_uid.txt
+done <dashboards-uids.txt
 
+# Verifica se algum painel do tipo graph foi encontrado
 if [ ! -s "${output_file}" ]; then
   printf "\nNenhum painel do tipo 'graph' foi encontrado.\n"
-  rm -rf dashboards{.json,_uid.txt}
+  rm -rf dashboards{.json,-uids.txt}
   exit 0
 fi
 
 # Remove linhas duplicadas, se houver
-sort -u -o "${output_file}" "${output_file}"
+sort -u "${output_file}" -o "${output_file}"
 
-# Adiciona o cabeçalho no arquivo gerado
-sed -i "1s/^/dashboardFolder;dashboardName;url\n/" "${output_file}"
+# Insere cabeçalho no arquivo CSV
+sed -i '1i\
+dashboardFolder;dashboardName;url
+' "${output_file}"
 
 # Remove arquivos temporários
-rm -rf dashboards{.json,_uid.txt}
+rm -rf dashboards{.json,-uids.txt}

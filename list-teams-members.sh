@@ -3,7 +3,7 @@
 # Habilita o modo de saída de erro
 set -euo pipefail
 
-# Verifica se a url e o token foram passados como argumentos
+# Verifica se a URL e o token foram passados como argumentos
 if [ $# -lt 2 ]; then
     printf "\nUso do script: %s <grafana_url> <grafana_token>\n" "$0"
     exit 1
@@ -16,13 +16,13 @@ grafana_token=$2
 # Define a data atual
 date_now=$(date +%Y-%m-%d)
 
-# Arquivo de saída
+# Nome do arquivo de saída
 output_file="${date_now}-grafana-teams-members.csv"
 
 #
 grafana_api_teams="${grafana_url}/api/teams"
 
-# Consulta API do Grafana e extrai todos teams configurados, com tratamento de erro de conexão
+# Consulta API do Grafana e salva a resposta em JSON (com tratamento de erro de conexão)
 if ! curl -sk "${grafana_api_teams}" \
     -H "Accept: application/json" \
     -H "Authorization: Bearer ${grafana_token}" \
@@ -61,7 +61,7 @@ while IFS= read -r team_id; do
     # Extrai nome do team
     name=$(jq -r '.name' "${team_id}.json")
 
-    # Lista os membros do team e salva em um arquivo temporário
+    # Lista os usuários existentes no team e salva em um arquivo temporário
     curl -sk "${grafana_api_teams}/${team_id}/members" \
         -H "Accept: application/json" \
         -H "Authorization: Bearer ${grafana_token}" \
@@ -73,8 +73,10 @@ while IFS= read -r team_id; do
 
 done <"teams_ids.txt"
 
-# Adiciona um cabeçalho ao arquivo CSV
-sed -i "1s/^/Name;Login\n/" "${output_file}"
+# Insere cabeçalho no arquivo CSV
+sed -i '1i\
+Name;Login
+' "${output_file}"
 
 # Remove arquivos temporários
 rm -f teams{.json,_ids.txt}
