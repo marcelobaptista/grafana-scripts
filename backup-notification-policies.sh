@@ -5,8 +5,8 @@ set -euo pipefail
 
 # Verifica se a URL e o token foram passados como argumentos
 if [ $# -lt 2 ]; then
-  printf "\nUso do script: %s <grafana_url> <grafana_token>\n" "$0"
-  exit 1
+	printf "\nUso do script: %s <grafana_url> <grafana_token>\n" "$0"
+	exit 1
 fi
 
 # Argumentos passados para o script
@@ -19,29 +19,35 @@ date_now=$(date +%Y-%m-%d)
 # Endpoint para requisições
 grafana_api_notification_policies="${grafana_url}/api/v1/provisioning/policies"
 
-# Consulta a API do Grafana e salva a resposta em JSON (com tratamento de erro de conexão)
+# Pasta de destino para os arquivos de backup
+folder_destination="${date_now}-notification-policies-backup"
+
+# Consulta API do Grafana e salva a resposta em JSON (com tratamento de erro de conexão)
 if ! curl -sk "${grafana_api_notification_policies}" \
-  -H "Accept: application/json" \
-  -H "Authorization: Bearer ${grafana_token}" \
-  -H "Content-Type: application/json" \
-  -o "temp.json"; then
-  printf "\nErro: falha na conexão com a URL ou problema de resolução DNS.\n"
-  exit 1
+	-H "Accept: application/json" \
+	-H "Authorization: Bearer ${grafana_token}" \
+	-H "Content-Type: application/json" |
+	jq -r >"notification-policies.json"; then
+	printf "\nErro: falha na conexão com a URL ou problema de resolução DNS.\n"
+	exit 1
 fi
 
 # Verifica se o token é inválido ou sem permissão suficiente
-if grep -iq "invalid API key" "temp.json"; then
-  printf "\nErro: chave de API inválida.\n"
-  rm -f "temp.json"
-  exit 1
-elif grep -iq "Access denied" "temp.json" || grep -iq "Permissions needed" "temp.json"; then
-  printf "\nErro: token sem permissão suficiente.\n"
-  rm -f "temp.json"
-  exit 1
+if grep -iq "invalid API key" "notification-policies.json"; then
+	printf "\nErro: chave de API inválida.\n"
+	rm -f "notification-policies.json"
+	exit 1
+elif grep -iq "Access denied" "notification-policies.json" || grep -iq "Permissions needed" "notification-policies.json"; then
+	printf "\nErro: token sem permissão suficiente.\n"
+	rm -f "notification-policies.json"
+	exit 1
 fi
 
-# Formata e salva o JSON de notification policy
-jq -r '.' temp.json >"${date_now}-notification-policy-tree.json"
+# Cria diretório para salvar o arquivo de backup
+mkdir -p "${folder_destination}"
+
+# Faz o backup dos notification policies
+mv notification-policies.json "${folder_destination}/notification-policy-tree.json"
 
 # Remove arquivo temporário
-rm -f temp.json
+rm -f notification-policies.json
