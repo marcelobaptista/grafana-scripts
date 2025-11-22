@@ -24,7 +24,7 @@ if ! curl -sk "${grafana_url}/api/search?type=dash-db&limit=5000" \
 	-H "Accept: application/json" \
 	-H "Authorization: Bearer ${grafana_token}" \
 	-H "Content-Type: application/json" \
-	-o "dashboards.json"; then
+	> "dashboards.json"; then
 	printf "\nErro: falha na conexão com a URL ou problema de resolução DNS.\n"
 	rm -f "dashboards.json"
 	exit 1

@@ -33,7 +33,7 @@ if ! curl -sk "${grafana_api_alert_rules}" \
 	-H "Accept: application/json" \
 	-H "Content-Type: application/json" \
 	-H "Authorization: Bearer ${grafana_token}" \
-	-o alert-rules.json; then
+	> alert-rules.json; then
 	printf "\nErro: falha na conexão com a URL ou problema de resolução DNS.\n"
 	rm -f "alert-rules.json"
 	exit 1
@@ -62,7 +62,7 @@ jq -r --arg folderUID "${folder_uid}" \
 while IFS= read -r uid; do
 	if ! curl -sk "${grafana_api_alert_rules}/${uid}" \
 		-H "Authorization: Bearer ${grafana_token}" \
-		-o temp.json; then
+		> temp.json; then
 		logging "Aviso: falha ao baixar alert-rule ${uid}; pulando"
 		continue
 	fi
@@ -90,7 +90,7 @@ while IFS= read -r rulegroup; do
 	# Atualiza rule groupos, pois alert rules se tornam não editáveis
 	# ao serem atualizados por meio de API.
 	# Usando o endpoint de rule group voltam a ser editáveis
-	if ! curl -sk "${url}" -H "Authorization: Bearer ${grafana_token}" -o temp.json; then
+	if ! curl -sk "${url}" -H "Authorization: Bearer ${grafana_token}" > temp.json; then
 		logging "Aviso: falha ao baixar rule-group ${rulegroup}; pulando"
 		continue
 	fi
