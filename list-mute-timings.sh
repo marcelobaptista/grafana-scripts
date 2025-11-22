@@ -5,8 +5,8 @@ set -euo pipefail
 
 # Verifica se a URL e o token foram passados como argumentos
 if [ $# -lt 2 ]; then
-  printf "\nUso do script: %s <grafana_url> <grafana_token>\n" "$0"
-  exit 1
+	printf "\nUso do script: %s <grafana_url> <grafana_token>\n" "$0"
+	exit 1
 fi
 
 # Argumentos passados para o script
@@ -24,23 +24,23 @@ endpoint_mute_timings="${grafana_url}/api/v1/provisioning/mute-timings"
 
 # Consulta API do Grafana e salva a resposta em JSON (com tratamento de erro de conexão)
 if ! curl -sk "${endpoint_mute_timings}" \
-  -H "Accept: application/json" \
-  -H "Authorization: Bearer ${grafana_token}" \
-  -H "Content-Type: application/json" \
-  > "mute-timings.json"; then
-  printf "\nErro: falha na conexão com a URL ou problema de resolução DNS.\n"
-  exit 1
+	-H "Accept: application/json" \
+	-H "Authorization: Bearer ${grafana_token}" \
+	-H "Content-Type: application/json" \
+	>"mute-timings.json"; then
+	printf "\nErro: falha na conexão com a URL ou problema de resolução DNS.\n"
+	exit 1
 fi
 
 # Verifica se o token é inválido ou sem permissão suficiente
 if grep -iq "invalid API key" "mute-timings.json"; then
-  printf "\nErro: chave de API inválida.\n"
-  rm -f mute-timings.json
-  exit 1
+	printf "\nErro: chave de API inválida.\n"
+	rm -f mute-timings.json
+	exit 1
 elif grep -iq "Access denied" "mute-timings.json" || grep -iq "Permissions needed" "mute-timings.json"; then
-  printf "\nErro: token sem permissão suficiente.\n"
-  rm -f mute-timings.json
-  exit 1
+	printf "\nErro: token sem permissão suficiente.\n"
+	rm -f mute-timings.json
+	exit 1
 fi
 
 # Gera o CSV com informações dos mute timings

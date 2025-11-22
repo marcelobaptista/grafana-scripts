@@ -5,8 +5,8 @@ set -euo pipefail
 
 # Verifica se a URL e o token foram passados como argumentos
 if [ $# -lt 2 ]; then
-  printf "\nUso do script: %s <grafana_url> <grafana_token>\n" "$0"
-  exit 1
+	printf "\nUso do script: %s <grafana_url> <grafana_token>\n" "$0"
+	exit 1
 fi
 
 # Argumentos passados para o script
@@ -24,23 +24,23 @@ grafana_api_folders="${grafana_url}/api/folders"
 
 # Consulta API do Grafana e salva a resposta em JSON (com tratamento de erro de conexão)
 if ! curl -sk "${grafana_api_folders}" \
-    -H "Accept: application/json" \
-    -H "Authorization: Bearer ${grafana_token}" \
-    -H "Content-Type: application/json" \
-    > "folders.json"; then
-    printf "\nErro: falha na conexão com a URL ou problema de resolução DNS.\n"
-    exit 1
+	-H "Accept: application/json" \
+	-H "Authorization: Bearer ${grafana_token}" \
+	-H "Content-Type: application/json" \
+	>"folders.json"; then
+	printf "\nErro: falha na conexão com a URL ou problema de resolução DNS.\n"
+	exit 1
 fi
 
 # Verifica se o token é inválido ou sem permissão suficiente
 if grep -iq "invalid API key" "folders.json"; then
-    printf "\nErro: chave de API inválida.\n"
-    rm -f "folders.json"
-    exit 1
+	printf "\nErro: chave de API inválida.\n"
+	rm -f "folders.json"
+	exit 1
 elif grep -iq "Access denied" "folders.json" || grep -iq "Permissions needed" "folders.json"; then
-    printf "\nErro: token sem permissão suficiente.\n"
-    rm -f "folders.json"
-    exit 1
+	printf "\nErro: token sem permissão suficiente.\n"
+	rm -f "folders.json"
+	exit 1
 fi
 
 # Cria lista de UIDs dos folders
@@ -52,15 +52,15 @@ echo "folderName;folderUid;teamName;teamId;userName;userId;permission;folderURL"
 # Itera sobre cada folder UID e extrai informações
 while IFS= read -r folder_uid; do
 
-    # Salva o folder em um arquivo temporário
-    curl -# -sk "${grafana_api_folders}/${folder_uid}/permissions" \
-        -H "Accept: application/json" \
-        -H "Authorization: Bearer ${grafana_token}" \
-        -H "Content-Type: application/json" \
-        | jq -r >"folder-${folder_uid}.json"
+	# Salva o folder em um arquivo temporário
+	curl -# -sk "${grafana_api_folders}/${folder_uid}/permissions" \
+		-H "Accept: application/json" \
+		-H "Authorization: Bearer ${grafana_token}" \
+		-H "Content-Type: application/json" |
+		jq -r >"folder-${folder_uid}.json"
 
-    # Extrai as informações e adiciona ao arquivo CSV
-    jq -r --arg grafana_url "${grafana_url}" '
+	# Extrai as informações e adiciona ao arquivo CSV
+	jq -r --arg grafana_url "${grafana_url}" '
       .[] |
       if .userId != 0 then
         (.title // "-") + ";" +
@@ -81,9 +81,8 @@ while IFS= read -r folder_uid; do
       end
     ' "folder-${folder_uid}.json" >>"${output_file}"
 
+	rm -f "folder-${folder_uid}.json"
 
-    rm -f "folder-${folder_uid}.json"
-    
 done <"folders-uids.txt"
 
 # Remove arquivos temporários

@@ -5,8 +5,8 @@ set -euo pipefail
 
 # Verifica se a URL e o token foram passados como argumentos
 if [ $# -lt 2 ]; then
-  printf "\nUso do script: %s <grafana_url> <grafana_token>\n" "$0"
-  exit 1
+	printf "\nUso do script: %s <grafana_url> <grafana_token>\n" "$0"
+	exit 1
 fi
 
 # Argumentos passados para o script
@@ -20,14 +20,28 @@ date_now=$(date +%Y-%m-%d)
 output_file="${date_now}-datasources-report.csv"
 
 # Endpoint para requisições
-endpoint_datasources="${grafana_url}/api/datasources"
+grafana_endpoint_datasources="${grafana_url}/api/datasources"
 
 # Consulta API do Grafana e salva a resposta em JSON (com tratamento de erro de conexão)
-curl -sk "${endpoint_datasources}" \
-  -H "Accept: application/json" \
-  -H "Authorization: Bearer ${grafana_token}" \
-  -H "Content-Type: application/json" |
-  jq -r >datasources.json
+if ! curl -sk "${grafana_endpoint_datasources}" \
+	-H "Accept: application/json" \
+	-H "Authorization: Bearer ${grafana_token}" \
+	-H "Content-Type: application/json" \
+	>"datasources.json"; then
+	printf "\nErro: falha na conexão com a URL ou problema de resolução DNS.\n"
+	exit 1
+fi
+
+# Verifica se o token é inválido ou sem permissão suficiente
+if grep -iq "invalid API key" "datasources.json"; then
+	printf "\nErro: chave de API inválida.\n"
+	rm -f "datasources.json"
+	exit 1
+elif grep -iq "Access denied" "datasources.json" || grep -iq "Permissions needed" "datasources.json"; then
+	printf "\nErro: token sem permissão suficiente.\n"
+	rm -f "datasources.json"
+	exit 1
+fi
 
 # Extrai as informações e adiciona ao arquivo CSV
 jq -r '.[] |
