@@ -27,7 +27,7 @@ if ! curl -sk "${grafana_api_folders}" \
 	-H "Accept: application/json" \
 	-H "Authorization: Bearer ${grafana_token}" \
 	-H "Content-Type: application/json" \
-	>"folders.json"; then
+  -o "folders.json"; then
 	printf "\nErro: falha na conexão com a URL ou problema de resolução DNS.\n"
 	exit 1
 fi

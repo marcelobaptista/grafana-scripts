@@ -33,9 +33,8 @@ if ! curl -sk "${grafana_api_alert_rules}" \
 	-H "Accept: application/json" \
 	-H "Content-Type: application/json" \
 	-H "Authorization: Bearer ${grafana_token}" \
-	-o alert-rules.json; then
+	>alert-rules.json; then
 	printf "\nErro: falha na conexão com a URL ou problema de resolução DNS.\n"
-	rm -f "alert-rules.json"
 	exit 1
 fi
 
@@ -52,23 +51,23 @@ fi
 
 # Extrai UIDs dos alert rules
 jq -r --arg folderUID "${folder_uid}" \
-	'.[] | select(.folderUID == "'"${folder_uid}"'") | .uid' alert-rules.json >alert-rules.txt
+	'.[] | select(.folderUID == "'"${folder_uid}"'") | .uid' alert-rules.json >alert-rules-ids.txt
 
-# Extrai folderUIDs dos rule groups
+# Extrai UIDs dos rule groups
 jq -r --arg folderUID "${folder_uid}" \
-	'.[] | select(.folderUID == "'"${folder_uid}"'") | .ruleGroup' alert-rules.json >rule-groups.txt
+	'.[] | select(.folderUID == "'"${folder_uid}"'") | .ruleGroup' alert-rules.json >rule-groups-ids.txt
 
-# Itera sobre cada  UID
+# Itera sobre cada alert rule UID
 while IFS= read -r uid; do
 	if ! curl -sk "${grafana_api_alert_rules}/${uid}" \
 		-H "Authorization: Bearer ${grafana_token}" \
-		-o temp.json; then
+		>"alert-rule-${uid}.json"; then
 		logging "Aviso: falha ao baixar alert-rule ${uid}; pulando"
 		continue
 	fi
 
 	# deleta a label configurada
-	data_raw=$(jq --arg key "${label}" 'del(.labels[$key])' temp.json)
+	data_raw=$(jq --arg key "${label}" 'del(.labels[$key])' "alert-rule-${uid}.json")
 
 	# Atualiza a regra de alerta no Grafana
 	if ! curl -sk -X PUT "${grafana_api_alert_rules}/${uid}" \
@@ -80,32 +79,47 @@ while IFS= read -r uid; do
 	else
 		logging "Atualizado alert-rule ${uid} (chave '${label}' removida)"
 	fi
-done <"alert-rules.txt"
 
+	# Remove arquivo temporário
+	rm -f "alert-rule-${uid}.json"
+
+done <"alert-rules-ids.txt"
+
+# Itera sobre cada rule group
 while IFS= read -r rulegroup; do
-	# Tratamento de espaços na URL
-	url="${grafana_api_rule_groups}/${rulegroup}"
-	url="${url// /%20}"
 
-	# Atualiza rule groupos, pois alert rules se tornam não editáveis
-	# ao serem atualizados por meio de API.
-	# Usando o endpoint de rule group voltam a ser editáveis
-	if ! curl -sk "${url}" -H "Authorization: Bearer ${grafana_token}" -o temp.json; then
+	# Faz URL encoding do nome do rule group (espaços, caracteres especiais, etc.)
+	# https://www.w3schools.com/tags/ref_urlencode.ASP
+	rulegroup_encoded=$(python3 -c 'import urllib.parse,sys; print(urllib.parse.quote(sys.argv[1], safe=""))' "${rulegroup}")
+
+	# Baixa o rule group
+	if ! curl -sk "${grafana_api_rule_groups}/${rulegroup_encoded}" \
+		-H "Accept: application/json" \
+		-H "Content-Type: application/json" \
+		-H "Authorization: Bearer ${grafana_token}" \
+		>temp-rule-group.json; then
 		logging "Aviso: falha ao baixar rule-group ${rulegroup}; pulando"
 		continue
 	fi
 
-	if ! curl -sk -X PUT "${url}" \
+	# Atualiza rule groupos, pois alert rules se tornam não editáveis
+	# ao serem atualizados por meio de API.
+	# Usando o endpoint de rule group voltam a ser editáveis
+	if ! curl -sk -X PUT "${grafana_api_rule_groups}/${rulegroup_encoded}" \
 		-H "Accept: application/json" \
 		-H "X-Disable-Provenance: true" \
 		-H "Content-Type: application/json" \
 		-H "Authorization: Bearer ${grafana_token}" \
-		-d @temp.json >/dev/null 2>&1; then
+		-d @temp-rule-group.json >/dev/null 2>&1; then
 		logging "Erro: falha ao atualizar rule-group ${rulegroup}"
 	else
-		logging "Atualizado rule-group ${rulegroup}"
+		logging "Atualizado o rule group ${rulegroup}"
 	fi
-done <"rule-groups.txt"
 
-# Remove arquivos temporários gerados pelo script
-rm -f alert-rules.json temp.json alert-rules.txt rule-groups.txt
+	# Remove arquivo temporário
+	rm -f temp-rule-group.json
+
+done <"rule-groups-ids.txt"
+
+# Remove arquivos temporários
+rm -f alert-rules{.json,-ids.txt} rule-groups-ids.txt

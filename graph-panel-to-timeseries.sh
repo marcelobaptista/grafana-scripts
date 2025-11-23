@@ -27,7 +27,7 @@ folder_destination_updated="${date_now}-updated-dashboards"
 # Arquivo de log
 logfile="${date_now}-dashboards-backup.log"
 
-# # Função de logging para backups
+# Função de logging para backups
 logging_backup() {
 	local dashboard_title=$1
 	local dashboard_uid=$2
@@ -37,7 +37,7 @@ logging_backup() {
 	echo "${message}" | tee -a "${logfile}"
 }
 
-#  Função de logging para dashboards atualizados (de graph para timeseries)
+# Função de logging para dashboards atualizados (de graph para timeseries)
 logging_updated() {
 	local dashboard_title=$1
 	local dashboard_uid=$2
@@ -46,12 +46,12 @@ logging_updated() {
 	echo "${message}" | tee -a "${logfile}"
 }
 
-# CConsulta API do Grafana e salva a resposta em JSON (com tratamento de erro de conexão)
+# Consulta API do Grafana e salva a resposta em JSON (com tratamento de erro de conexão)
 if ! curl -sk "${grafana_api_search}" \
 	-H "Accept: application/json" \
 	-H "Authorization: Bearer ${grafana_token}" \
 	-H "Content-Type: application/json" \
-	>"dashboards.json"; then
+  -o "dashboards.json"; then
 	printf "\nErro: falha na conexão com a URL ou problema de resolução DNS.\n"
 	exit 1
 fi

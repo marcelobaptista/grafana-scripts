@@ -19,7 +19,7 @@ date_now=$(date +%Y-%m-%d)
 # Nome do arquivo de saída
 output_file="${date_now}-grafana-teams-members.csv"
 
-#
+# Endpoint para requisições
 grafana_api_teams="${grafana_url}/api/teams"
 
 # Consulta API do Grafana e salva a resposta em JSON (com tratamento de erro de conexão)
@@ -29,7 +29,6 @@ if ! curl -sk "${grafana_api_teams}" \
 	-H "Content-Type: application/json" \
 	-o "teams.json"; then
 	printf "\nErro: falha na conexão com a URL ou problema de resolução DNS.\n"
-	rm -f "teams.json"
 	exit 1
 fi
 
@@ -40,6 +39,10 @@ if grep -iq "invalid API key" "teams.json"; then
 	exit 1
 elif grep -iq "Access denied" "teams.json" || grep -iq "Permissions needed" "teams.json"; then
 	printf "\nErro: token sem permissão suficiente.\n"
+	rm -f "teams.json"
+	exit 1
+elif grep -iq "Not found" "teams.json"; then
+	printf "\nErro: não há teams configurados.\n"
 	rm -f "teams.json"
 	exit 1
 fi

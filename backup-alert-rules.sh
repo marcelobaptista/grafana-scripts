@@ -41,9 +41,8 @@ if ! curl -sk "${grafana_api_alert_rules}" \
 	-H "Accept: application/json" \
 	-H "Authorization: Bearer ${grafana_token}" \
 	-H "Content-Type: application/json" \
-	>"alert-rules.json"; then
+  -o "alert-rules.json"; then
 	printf "\nErro: falha na conexão com a URL ou problema de resolução DNS.\n"
-	rm -f "alert-rules.json"
 	exit 1
 fi
 
