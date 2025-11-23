@@ -27,7 +27,7 @@ if ! curl -sk "${grafana_api_contact_points}" \
 	-H "Accept: application/json" \
 	-H "Authorization: Bearer ${grafana_token}" \
 	-H "Content-Type: application/json" \
-	>"contact-points.json"; then
+  -o "contact-points.json"; then
 	printf "\nErro: falha na conexão com a URL ou problema de resolução DNS.\n"
 	exit 1
 fi

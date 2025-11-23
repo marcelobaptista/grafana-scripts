@@ -1,36 +1,32 @@
-#!/usr/bin/bash
-
-########################################################
-# Script para criar usuários no Grafana usando sua API #
-########################################################
-
-# Este script solicita a senha de admin do Grafana
-# e o nome do arquivo csv para criação dos usuários.
-# O arquivo csv deve conter nome, email, nome de login, senha e orgId
+#!/bin/bash
 
 # Habilita o modo de saída de erro
 set -euo pipefail
 
-# Verifica se o arquivo CSV foi passado como argumento
-if [ $# -ne 1 ]; then
-	echo "Uso do script: $0 arquivo.csv"
+# Verifica se a URL, token e arquivo CSV foram passados como argumentos
+if [ $# -lt 3 ]; then
+	printf "\nUso do script: %s <grafana_url> <admin_user> <arquivo>\n" "$0"
 	exit 1
 fi
 
-grafana_url="" # URL do Grafana
+# Argumentos passados para o script
+grafana_url=$1
+admin_user=$2
+file=$3
 
-# Solicita o token de acesso à API do Grafana
+# Lê a senha de forma segura
 printf "\nDigite a senha de admin:\n\n"
 read -r password
 [[ -z "${password}" ]] && echo "Erro: Senha não pode ser vazia" && exit 1
 
 # Codifica o usuário e senha para base64
-auth_basic=$(echo -n "admin:${password}" | base64)
+auth_basic=$(echo -n "${admin_user}:${password}" | base64)
 
-# Loop através das linhas do arquivo CSV, excluindo o cabeçalho
-while IFS=',' read -r name email login user_password orgid; do
+# Percorre as linhas do arquivo CSV
+while IFS=';' read -r name email login user_password orgid; do
+
 	# Monta o JSON para cada linha do CSV
-	json_data=$(
+	json_body=$(
 		cat <<EOF
 {
   "name":"${name}",
@@ -47,7 +43,7 @@ EOF
 		-H "Accept: application/json" \
 		-H "Authorization: Basic ${auth_basic}" \
 		-H "Content-Type: application/json" \
-		-d "${json_data}" 2>&1)
+  	-o d "${json_body}" 2>&1)
 
 	# Verifica o tipo de resposta usando case
 	case "${response}" in
@@ -77,4 +73,4 @@ EOF
 		fi
 		;;
 	esac
-done <"$1" # Lê o arquivo CSV fornecido como argumento
+done <"${file}"

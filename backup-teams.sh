@@ -40,7 +40,7 @@ if ! curl -sk "${grafana_api_teams}/search?" \
 	-H "Accept: application/json" \
 	-H "Authorization: Bearer ${grafana_token}" \
 	-H "Content-Type: application/json" \
-	>"teams.json"; then
+  -o "teams.json"; then
 	printf "\nErro: falha na conexão com a URL ou problema de resolução DNS.\n"
 	exit 1
 fi

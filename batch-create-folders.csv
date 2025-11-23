@@ -1,0 +1,6 @@
+folderA;;
+folderB;;
+subFolder1;folderA;
+subFolder2;folderA;
+subFolder3;folderB;
+subSubFolder1;subFolder1;

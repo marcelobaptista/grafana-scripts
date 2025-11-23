@@ -56,7 +56,7 @@ if ! curl -sk "${grafana_api_users}" \
 	-H "Accept: application/json" \
 	-H "Authorization: Bearer ${grafana_token}" \
 	-H "Content-Type: application/json" \
-	> "users.json"; then
+  -o "users.json"; then
 	printf "\nErro: falha na conexão com a URL ou problema de resolução DNS.\n"
 	exit 1
 fi

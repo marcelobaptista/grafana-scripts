@@ -40,7 +40,7 @@ if ! curl -sk "${grafana_api_datasources}" \
 	-H "Accept: application/json" \
 	-H "Authorization: Bearer ${grafana_token}" \
 	-H "Content-Type: application/json" \
-	>"datasources.json"; then
+  -o "datasources.json"; then
 	printf "\nErro: falha na conexão com a URL ou problema de resolução DNS.\n"
 	exit 1
 fi

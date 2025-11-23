@@ -27,7 +27,7 @@ if ! curl -sk "${endpoint_mute_timings}" \
 	-H "Accept: application/json" \
 	-H "Authorization: Bearer ${grafana_token}" \
 	-H "Content-Type: application/json" \
-	>"mute-timings.json"; then
+  -o "mute-timings.json"; then
 	printf "\nErro: falha na conexão com a URL ou problema de resolução DNS.\n"
 	exit 1
 fi

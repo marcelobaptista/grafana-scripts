@@ -19,7 +19,7 @@ date_now=$(date +%Y-%m-%d)
 # Endpoint para requisições
 grafana_api_mute_timings="${grafana_url}/api/v1/provisioning/mute-timings"
 
-# # Pasta de destino para os arquivos de backup
+# Pasta de destino para os arquivos de backup
 folder_destination="${date_now}-mute-timings-backup"
 
 # Arquivo de log
@@ -40,7 +40,7 @@ if ! curl -sk "${grafana_api_mute_timings}" \
 	-H "Accept: application/json" \
 	-H "Authorization: Bearer ${grafana_token}" \
 	-H "Content-Type: application/json" \
-	>"mute-timings.json"; then
+  -o "mute-timings.json"; then
 	printf "\nErro: falha na conexão com a URL ou problema de resolução DNS.\n"
 	exit 1
 fi
@@ -65,7 +65,8 @@ mkdir -p "${folder_destination}"
 # Itera sobre cada mute timing e faz backup
 while IFS= read -r mute_timing_name; do
 
-	# Faz encoding correto do nome para uso na URL
+	# Faz URL encoding do nome do rule group (espaços, caracteres especiais, etc.)
+	# https://www.w3schools.com/tags/ref_urlencode.ASP
 	name=$(python3 -c 'import urllib.parse,sys; print(urllib.parse.quote(sys.argv[1], safe=""))' "${mute_timing_name}")
 
 	# Formata o título do mute timing para ser usado como nome de arquivo

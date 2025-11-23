@@ -3,7 +3,7 @@
 # Habilita o modo de saída de erro
 set -euo pipefail
 
-# Verifica se o ambiente e o token foram passados como argumentos
+# Verifica se a URL e o token foram passados como argumentos
 if [ $# -lt 3 ]; then
 	echo "Usage: $0 <grafana_url> <grafana_token> <origin>"
 	exit 1
@@ -19,7 +19,7 @@ if ! curl -sk "${grafana_url}/api/org" \
 	-H "Accept: application/json" \
 	-H "Authorization: Bearer ${grafana_token}" \
 	-H "Content-Type: application/json" \
-	>"org.json"; then
+  -o "org.json"; then
 	printf "\nErro: falha na conexão com a URL ou problema de resolução DNS.\n"
 	exit 1
 fi
@@ -38,7 +38,7 @@ fi
 # Remove arquivo temporário
 rm -f "org.json"
 
-# Define a data atual para logs
+# Define a data atual para
 import_date=$(date +%Y-%m-%d)
 
 echo "Escolha o tipo para importar:"
